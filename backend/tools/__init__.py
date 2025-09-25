@@ -15,8 +15,6 @@ Version: 1.0.0
 License: MIT
 """
 
-__version__ = "1.0.0"
-__author__ = "SIH Team 25069"
 
 # Import all calculation functions
 from .gwp_constants import (
