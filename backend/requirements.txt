@@ -1,115 +1,27 @@
-# Web Framework and API
 fastapi
 uvicorn
 pydantic
-
-# LangChain Core and Models
 langchain-core
 langchain-cerebras
 langchain-community
 langchain-text-splitters
 langchain-huggingface
 langchain-pinecone
-
-# AI and Machine Learning
 sentence-transformers
 transformers
 torch
 scikit-learn
-
-# Vector Database
 pinecone-client
-
-# Data Processing and Analysis
 pandas
 numpy
 scipy
 openpyxl
 xlsxwriter
-
-# Visualization
 matplotlib
 seaborn
 plotly
-bokeh
-
-# Document Processing and Generation
 pypdf
 reportlab
 weasyprint
 jinja2
 markdown
-
-# Database and Storage
-sqlite3
-sqlalchemy
-redis
-
-# Networking and HTTP
-requests
-aiohttp
-httpx
-
-# Environment and Configuration
-python-dotenv
-pydantic-settings
-click
-
-# Logging and Monitoring
-loguru
-structlog
-
-# Testing
-pytest
-pytest-asyncio
-httpx
-
-# Date and Time
-python-dateutil
-pytz
-
-# File Processing
-pathlib2
-chardet
-
-# Security
-cryptography
-bcrypt
-
-# Async Support
-asyncio
-aiofiles
-
-# Math and Statistics
-statistics
-math
-
-# JSON and Data Serialization
-orjson
-pydantic
-
-# Image Processing (for charts)
-pillow
-
-# Progress Bars and CLI
-tqdm
-rich
-
-# Validation
-validators
-email-validator
-
-# CORS and Middleware
-python-cors
-
-# Background Tasks
-celery
-rq
-
-# Caching
-cachetools
-
-# Utilities
-typing-extensions
-dataclasses-json
-more-itertools

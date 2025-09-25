@@ -1,17 +1,21 @@
 """
 FastAPI REST API for LCA Analysis System
-Provides endpoints for all LCA analysis functions
+Provides endpoints for all LCA analysis functions including file upload
 """
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional, List
 import uvicorn
 import logging
+import os
+import shutil
 from datetime import datetime
+from pathlib import Path
 
-from main import LCASystem, run_quick_lca_analysis, run_compliance_focused_analysis
+from main import LCASystem, run_quick_lca_analysis, run_compliance_focused_analysis, run_file_analysis
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -20,21 +24,29 @@ logger = logging.getLogger(__name__)
 # Initialize FastAPI
 app = FastAPI(
     title="LCA Analysis System API",
-    description="Comprehensive Life Cycle Assessment API with AI-enhanced analysis",
+    description="Comprehensive Life Cycle Assessment API with AI-enhanced analysis and LangGraph workflow",
     version="1.0.0"
 )
 
-# CORS middleware
+# CORS middleware - configured for Next.js frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=[
+        "http://localhost:3000",  # Next.js default
+        "http://127.0.0.1:3000",
+        "https://your-nextjs-domain.com"  # Replace with your production domain
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
 
 # Initialize LCA System
 lca_system = LCASystem()
+
+# Create upload directory
+UPLOAD_DIR = Path("./uploads")
+UPLOAD_DIR.mkdir(exist_ok=True)
 
 # Pydantic models
 class LCARequest(BaseModel):
@@ -56,20 +68,37 @@ class ComplianceRequest(BaseModel):
     production_kg: float = Field(..., gt=0)
     study_type: str = Field("comparative_assertion")
 
+class FileAnalysisRequest(BaseModel):
+    file_type: str = Field("excel", description="Type of uploaded file")
+    study_type: str = Field("internal_decision_support")
+    report_type: str = Field("technical")
+    format_type: str = Field("all")
+
 # API Endpoints
 @app.get("/")
 async def root():
     """Root endpoint with API information"""
     return {
-        "message": "LCA Analysis System API",
+        "message": "LCA Analysis System API with LangGraph Workflow",
         "version": "1.0.0",
         "status": "active",
         "timestamp": datetime.now().isoformat(),
+        "features": [
+            "Complete LCA Analysis with LangGraph workflow",
+            "File upload support (Excel/CSV)",
+            "ISO compliance checking",
+            "AI-enhanced insights",
+            "Multiple report formats",
+            "Circularity metrics",
+            "Sankey diagrams and visualizations"
+        ],
         "endpoints": {
             "complete_analysis": "/api/v1/lca/complete",
             "quick_analysis": "/api/v1/lca/quick",
             "compliance_analysis": "/api/v1/lca/compliance",
-            "health_check": "/health"
+            "file_analysis": "/api/v1/lca/file-upload",
+            "health_check": "/health",
+            "supported_metals": "/api/v1/lca/supported-metals"
         }
     }
 
@@ -80,16 +109,23 @@ async def health_check():
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "system_status": {
+            "data_ingestion_agent": "active",
             "lca_agent": "active",
-            "data_quality_agent": "active", 
             "compliance_agent": "active",
-            "reporting_agent": "active"
-        }
+            "reporting_agent": "active",
+            "langgraph_workflow": "active"
+        },
+        "workflow_nodes": [
+            "data_ingestion",
+            "lca_analysis", 
+            "compliance_check",
+            "report_generation"
+        ]
     }
 
 @app.post("/api/v1/lca/complete")
 async def complete_lca_analysis(request: LCARequest):
-    """Run complete LCA analysis with all agents"""
+    """Run complete LCA analysis with LangGraph workflow"""
     try:
         logger.info(f"Starting complete LCA analysis for {request.metal_type}")
         
@@ -111,7 +147,12 @@ async def complete_lca_analysis(request: LCARequest):
         return {
             "status": "success",
             "message": "Complete LCA analysis completed successfully",
-            "results": results
+            "analysis_id": results["analysis_id"],
+            "workflow_status": "completed",
+            "results": results,
+            "summary": results["summary"],
+            "visualizations": results.get("report_generation", {}).get("output_files", {}),
+            "timestamp": results["workflow_timestamp"]
         }
         
     except Exception as e:
@@ -142,7 +183,7 @@ async def quick_lca_analysis(request: QuickLCARequest):
             "carbon_footprint_kg_co2_eq": summary["lca_summary"]["total_carbon_footprint_kg_co2_eq"],
             "carbon_intensity_per_kg": summary["lca_summary"]["carbon_intensity_per_kg"],
             "sustainability_score": summary["lca_summary"]["sustainability_score"],
-            "data_quality_score": summary["data_quality_summary"]["overall_score"],
+            "circularity_index": summary["lca_summary"]["circularity_index"],
             "compliance_grade": summary["compliance_summary"]["compliance_grade"],
             "report_files": summary["report_summary"]["report_files"],
             "timestamp": results["workflow_timestamp"]
@@ -189,21 +230,122 @@ async def compliance_focused_analysis(request: ComplianceRequest):
         logger.error(f"Error in compliance analysis: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/v1/lca/file-upload")
+async def file_based_analysis(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    file_type: str = Form("excel"),
+    study_type: str = Form("internal_decision_support"),
+    report_type: str = Form("technical"),
+    format_type: str = Form("all")
+):
+    """Upload file and run LCA analysis using LangGraph workflow"""
+    try:
+        # Validate file type
+        allowed_types = [
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",  # xlsx
+            "application/vnd.ms-excel",  # xls
+            "text/csv",  # csv
+            "application/csv"
+        ]
+        
+        if file.content_type not in allowed_types:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Unsupported file type: {file.content_type}. Supported: Excel (.xlsx, .xls) and CSV (.csv)"
+            )
+        
+        # Save uploaded file
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_extension = Path(file.filename).suffix
+        saved_filename = f"lca_data_{timestamp}{file_extension}"
+        file_path = UPLOAD_DIR / saved_filename
+        
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        logger.info(f"File uploaded successfully: {saved_filename}")
+        
+        # Run analysis using LangGraph workflow
+        results = run_file_analysis(str(file_path), file_type)
+        
+        # Clean up uploaded file after processing
+        background_tasks.add_task(os.remove, file_path)
+        
+        if not results.get("success"):
+            raise HTTPException(status_code=400, detail=results.get("error", "File analysis failed"))
+        
+        return {
+            "status": "success",
+            "message": "File-based LCA analysis completed successfully",
+            "analysis_id": results["analysis_id"],
+            "uploaded_file": saved_filename,
+            "workflow_status": "completed",
+            "ingested_data_summary": {
+                "records_processed": results.get("ingested_data", {}).get("records_count", 0),
+                "data_quality_score": results.get("ingested_data", {}).get("data_quality", {}).get("completeness", 0)
+            },
+            "results_summary": results["summary"],
+            "report_files": results["summary"]["report_summary"]["report_files"],
+            "visualizations": results.get("report_generation", {}).get("output_files", {}),
+            "timestamp": results["workflow_timestamp"]
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in file-based analysis: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/v1/lca/supported-metals")
 async def get_supported_metals():
-    """Get list of supported metal types"""
+    """Get list of supported metal types and configuration options"""
     return {
         "supported_metals": [
-            "steel", "aluminum", "copper", "zinc", "lead", 
-            "nickel", "tin", "magnesium", "titanium"
+            {"id": "steel", "name": "Steel", "description": "Carbon and stainless steel"},
+            {"id": "aluminum", "name": "Aluminum", "description": "Primary and secondary aluminum"},
+            {"id": "copper", "name": "Copper", "description": "Refined copper and alloys"},
+            {"id": "zinc", "name": "Zinc", "description": "Primary zinc production"},
+            {"id": "lead", "name": "Lead", "description": "Primary and secondary lead"},
+            {"id": "nickel", "name": "Nickel", "description": "Class I nickel"},
+            {"id": "tin", "name": "Tin", "description": "Primary tin smelting"},
+            {"id": "magnesium", "name": "Magnesium", "description": "Primary magnesium"},
+            {"id": "titanium", "name": "Titanium", "description": "Titanium metal production"}
         ],
         "regions": [
-            "US_average", "EU_average", "China", "Global_average"
+            {"id": "US_average", "name": "United States (Average)"},
+            {"id": "EU_average", "name": "European Union (Average)"},
+            {"id": "China", "name": "China"},
+            {"id": "Global_average", "name": "Global Average"}
         ],
         "study_types": [
-            "internal_decision_support", 
-            "comparative_assertion", 
-            "public_communication"
+            {
+                "id": "internal_decision_support",
+                "name": "Internal Decision Support",
+                "description": "For internal business decisions",
+                "critical_review_required": False
+            },
+            {
+                "id": "comparative_assertion",
+                "name": "Comparative Assertion",
+                "description": "Public comparative claims",
+                "critical_review_required": True
+            },
+            {
+                "id": "public_communication",
+                "name": "Public Communication",
+                "description": "Public disclosure of results",
+                "critical_review_required": True
+            }
+        ],
+        "report_formats": [
+            {"id": "pdf", "name": "PDF Report"},
+            {"id": "html", "name": "HTML Report"},
+            {"id": "json", "name": "JSON Data"},
+            {"id": "all", "name": "All Formats"}
+        ],
+        "file_formats": [
+            {"extension": ".xlsx", "description": "Excel 2007+ format"},
+            {"extension": ".xls", "description": "Excel 97-2003 format"},
+            {"extension": ".csv", "description": "Comma-separated values"}
         ]
     }
 
@@ -211,14 +353,52 @@ async def get_supported_metals():
 async def get_analysis_report(analysis_id: str):
     """Retrieve specific analysis report"""
     try:
-        # This would implement report retrieval logic
-        # For now, return placeholder
+        results_dir = Path("./results")
+        report_file = results_dir / f"{analysis_id}_complete_results.json"
+        
+        if not report_file.exists():
+            raise HTTPException(status_code=404, detail="Analysis report not found")
+        
+        import json
+        with open(report_file, 'r') as f:
+            report_data = json.load(f)
+        
         return {
-            "message": f"Report retrieval for {analysis_id}",
-            "status": "feature_pending"
+            "status": "success",
+            "analysis_id": analysis_id,
+            "report_data": report_data,
+            "retrieved_at": datetime.now().isoformat()
         }
+        
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Report not found: {analysis_id}")
     except Exception as e:
-        raise HTTPException(status_code=404, detail=f"Report not found: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving report: {str(e)}")
+
+@app.get("/api/v1/reports/{analysis_id}/download/{file_type}")
+async def download_report_file(analysis_id: str, file_type: str):
+    """Download specific report file"""
+    try:
+        # This would implement file download logic
+        # You'd need to track where files are saved and provide download links
+        reports_dir = Path("./reports")
+        
+        # Look for the file
+        pattern = f"*{analysis_id}*.{file_type}"
+        matching_files = list(reports_dir.glob(pattern))
+        
+        if not matching_files:
+            raise HTTPException(status_code=404, detail=f"Report file not found: {file_type}")
+        
+        file_path = matching_files[0]
+        return FileResponse(
+            path=file_path,
+            filename=f"lca_report_{analysis_id}.{file_type}",
+            media_type='application/octet-stream'
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"File not found: {str(e)}")
 
 if __name__ == "__main__":
     uvicorn.run(
