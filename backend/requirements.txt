@@ -2,8 +2,6 @@
 fastapi
 uvicorn
 pydantic
-python-multipart
-starlette
 
 # LangChain Core and Models
 langchain-core

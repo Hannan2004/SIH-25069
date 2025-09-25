@@ -11,7 +11,7 @@ from pathlib import Path
 
 # Import all agents
 from lca_agent import LCAAgent, calculate_lca_impact
-from data_quality_agent import DataQualityAgent, assess_data_quality
+from data_ingestion_agent import DataIngestionAgent, assess_data_quality
 from compliance_agent import ComplianceAgent, check_iso_compliance
 from reporting_agent import ReportingAgent, generate_lca_report
 
