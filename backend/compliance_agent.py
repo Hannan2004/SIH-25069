@@ -10,6 +10,7 @@ import logging
 import os
 import sys
 import json
+import time
 from datetime import datetime
 from pathlib import Path
 import hashlib
@@ -19,11 +20,15 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from langchain_core.tools import tool
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
+from langchain_core.documents import Document
 from langchain_cerebras import ChatCerebras
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from pinecone import Pinecone
+
+# Updated imports for your preferred pattern
+from pinecone import Pinecone, ServerlessSpec
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_pinecone import PineconeVectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -125,20 +130,6 @@ class ComplianceAgent:
         self.pinecone_environment = pinecone_environment or os.getenv("PINECONE_ENVIRONMENT")
         self.index_name = index_name
         
-        # Initialize Pinecone client
-        if self.pinecone_api_key:
-            try:
-                self.pc = Pinecone(api_key=self.pinecone_api_key)
-                self.index = self.pc.Index(self.index_name)
-                logger.info(f"Connected to Pinecone index: {self.index_name}")
-            except Exception as e:
-                logger.error(f"Failed to connect to Pinecone: {e}")
-                self.pc = None
-                self.index = None
-        else:
-            self.pc = None
-            self.index = None
-        
         # Initialize embeddings
         self.embeddings = HuggingFaceEmbeddings(
             model_name="sentence-transformers/all-MiniLM-L6-v2"
@@ -155,119 +146,155 @@ class ComplianceAgent:
             length_function=len
         )
         
-        # Check if ISO documents are indexed
-        self._ensure_iso_documents_indexed()
+        # Setup vector store
+        self.vector_store = self._setup_vector_store()
     
-    def _ensure_iso_documents_indexed(self):
-        """Ensure ISO 14040/14044 documents are indexed in Pinecone"""
+    def _setup_vector_store(self) -> PineconeVectorStore:
+        """Set up Pinecone vector store for ISO 14040/14044 standards"""
         
-        if not self.index:
-            logger.warning("Pinecone not available - ISO document indexing skipped")
-            return
-        
-        # Check if documents are already indexed
-        try:
-            stats = self.index.describe_index_stats()
-            if stats['total_vector_count'] > 0:
-                logger.info("ISO documents already indexed in Pinecone")
-                return
-        except Exception as e:
-            logger.warning(f"Could not check index stats: {e}")
-        
-        # Index ISO documents if they exist
-        current_dir = Path(__file__).parent
-        iso_files = [
-            "ISO_14040-2006.pdf",
-            "ISO_14044-2006.pdf"
-        ]
-        
-        for file_name in iso_files:
-            file_path = current_dir / file_name
-            if file_path.exists():
-                try:
-                    self._index_pdf_document(str(file_path))
-                    logger.info(f"Indexed {file_name}")
-                except Exception as e:
-                    logger.error(f"Failed to index {file_name}: {e}")
-            else:
-                logger.warning(f"ISO document not found: {file_path}")
-    
-    def _index_pdf_document(self, pdf_path: str):
-        """Index a PDF document in Pinecone"""
-        
-        if not self.index:
-            return
+        if not self.pinecone_api_key or not self.embeddings:
+            logging.warning("Pinecone API key or embeddings not available, skipping vector store setup")
+            return None
         
         try:
-            # Load PDF
-            loader = PyPDFLoader(pdf_path)
-            documents = loader.load()
+            pc = Pinecone(api_key=self.pinecone_api_key)
             
-            # Split into chunks
-            chunks = self.text_splitter.split_documents(documents)
+            existing_indexes = pc.list_indexes().names()
+
+            if self.index_name not in existing_indexes:
+                pc.create_index(
+                    name=self.index_name,
+                    dimension=384,  # all-MiniLM-L6-v2 dimension
+                    metric='cosine',
+                    spec=ServerlessSpec(
+                        cloud='aws',
+                        region='us-east-1'
+                    )
+                )
+                time.sleep(10)
+
+            index = pc.Index(self.index_name)
+            stats = index.describe_index_stats()
             
-            # Prepare vectors for indexing
-            vectors = []
-            for i, chunk in enumerate(chunks):
-                # Generate embedding
-                embedding = self.embeddings.embed_query(chunk.page_content)
+            if stats.total_vector_count > 0:
+                return PineconeVectorStore(
+                    index=index,
+                    embedding=self.embeddings
+                )
+
+            # Try to load actual ISO PDF documents first
+            documents = self._load_iso_documents()
+            
+            # If no PDFs found, create synthetic ISO knowledge base
+            if not documents:
+                iso_knowledge = [
+                    "ISO 14040 establishes principles and framework for life cycle assessment including goal and scope definition",
+                    "ISO 14044 specifies requirements for LCA studies including inventory analysis and impact assessment",
+                    "Functional unit must be clearly defined and quantified as the reference unit for LCA study",
+                    "System boundaries define which processes are included in the LCA study scope",
+                    "Life cycle inventory analysis involves data collection and calculation procedures for inputs and outputs",
+                    "Life cycle impact assessment includes classification, characterization, and optional normalization steps",
+                    "Critical review is mandatory for comparative assertions disclosed to the public",
+                    "Data quality requirements include temporal, geographical, and technological representativeness",
+                    "Allocation procedures must be documented when processes deliver multiple products",
+                    "Interpretation phase includes identification of significant issues and sensitivity analysis",
+                    "Transparency principle requires clear documentation of methodology and assumptions",
+                    "Iterative approach allows refinement of goal, scope and methodology throughout the study",
+                    "Impact category selection should be justified and relevant to the study goal",
+                    "Classification assigns inventory data to impact categories",
+                    "Characterization calculates category indicator results using characterization factors",
+                    "Uncertainty analysis should assess reliability of LCA results",
+                    "Sensitivity analysis evaluates influence of assumptions and methodological choices",
+                    "Documentation must be sufficient to enable critical review and reproducibility"
+                ]
                 
-                # Create unique ID
-                doc_id = hashlib.md5(f"{pdf_path}_{i}_{chunk.page_content[:100]}".encode()).hexdigest()
-                
-                # Prepare metadata
-                metadata = {
-                    "source": os.path.basename(pdf_path),
-                    "page": chunk.metadata.get("page", 0),
-                    "content": chunk.page_content[:500],  # Limit content size
-                    "chunk_index": i,
-                    "document_type": "iso_standard"
-                }
-                
-                vectors.append({
-                    "id": doc_id,
-                    "values": embedding,
-                    "metadata": metadata
-                })
+                documents = []
+                for i, knowledge in enumerate(iso_knowledge):
+                    doc = Document(
+                        page_content=knowledge,
+                        metadata={"source": "ISO_Standards_Knowledge", "chunk": i, "document_type": "iso_standard"}
+                    )
+                    documents.append(doc)
+
+            # Create vector store from documents
+            vector_store = PineconeVectorStore.from_documents(
+                documents=documents,
+                embedding=self.embeddings,
+                index_name=self.index_name
+            )
+
+            return vector_store
+        
+        except Exception as e:
+            logger.error(f"Error setting up vector store: {e}")
+            return None
+
+    def _load_iso_documents(self) -> List[Document]:
+        """Load ISO documents from PDFs if available"""
+        documents = []
+        
+        try:
+            current_dir = Path(__file__).parent
+            iso_files = [
+                "ISO-14040-2006.pdf",
+                "ISO-14044-2006.pdf"
+            ]
             
-            # Batch upsert to Pinecone
-            batch_size = 100
-            for i in range(0, len(vectors), batch_size):
-                batch = vectors[i:i + batch_size]
-                self.index.upsert(vectors=batch)
+            for file_name in iso_files:
+                file_path = current_dir / file_name
+                if file_path.exists():
+                    try:
+                        # Load PDF
+                        loader = PyPDFLoader(str(file_path))
+                        pdf_documents = loader.load()
+                        
+                        # Split into chunks
+                        chunks = self.text_splitter.split_documents(pdf_documents)
+                        
+                        # Add metadata
+                        for chunk in chunks:
+                            chunk.metadata.update({
+                                "source": file_name,
+                                "document_type": "iso_standard"
+                            })
+                        
+                        documents.extend(chunks)
+                        logger.info(f"Loaded {len(chunks)} chunks from {file_name}")
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to load {file_name}: {e}")
+                else:
+                    logger.warning(f"ISO document not found: {file_path}")
             
-            logger.info(f"Successfully indexed {len(vectors)} chunks from {pdf_path}")
+            return documents
             
         except Exception as e:
-            logger.error(f"Error indexing PDF {pdf_path}: {e}")
-            raise
+            logger.error(f"Error loading ISO documents: {e}")
+            return []
     
     def _query_iso_knowledge_base(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
         """Query the ISO standards knowledge base"""
         
-        if not self.index:
+        if not self.vector_store:
+            logger.warning("Vector store not available for querying")
             return []
         
         try:
-            # Generate query embedding
-            query_embedding = self.embeddings.embed_query(query)
-            
-            # Search Pinecone
-            results = self.index.query(
-                vector=query_embedding,
-                top_k=top_k,
-                include_metadata=True,
+            # Search vector store
+            results = self.vector_store.similarity_search_with_score(
+                query=query,
+                k=top_k,
                 filter={"document_type": "iso_standard"}
             )
             
             # Format results
             formatted_results = []
-            for match in results.get('matches', []):
+            for doc, score in results:
                 formatted_results.append({
-                    "content": match['metadata'].get('content', ''),
-                    "source": match['metadata'].get('source', ''),
-                    "page": match['metadata'].get('page', 0),
-                    "score": match['score']
+                    "content": doc.page_content,
+                    "source": doc.metadata.get('source', ''),
+                    "page": doc.metadata.get('page', 0),
+                    "score": score
                 })
             
             return formatted_results
@@ -751,7 +778,7 @@ class ComplianceAgent:
     def _assess_compliance_risks(self, compliance_summary: Dict[str, Any]) -> Dict[str, Any]:
         """Assess risks associated with current compliance level"""
         
-        compliance_level = compliance_summary["compliance_level"]
+        compliance_level = compliance_summary["overall_compliance_level"]
         major_issues = len(compliance_summary["major_issues"])
         
         # Risk assessment matrix
