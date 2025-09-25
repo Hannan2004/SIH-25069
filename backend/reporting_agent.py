@@ -1,429 +1,586 @@
 """
-Reporting Agent - Generates comprehensive LCA reports and visualizations
-Enhanced with Cerebras AI for intelligent insights
+Reporting Agent - Enhanced for comprehensive LCA reports
+Works with comprehensive LCA input data format
 """
 
-import json
 import logging
 import os
-import sys
+import json
+from typing import Dict, Any, List, Optional
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+import io
+import base64
 
-import matplotlib.pyplot as plt
-import pandas as pd
-import seaborn as sns
-from langchain_cerebras import ChatCerebras
-from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.tools import tool
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Image as RLImage
+# Optional imports with fallbacks
+try:
+    import pandas as pd
+    PANDAS_AVAILABLE = True
+except ImportError:
+    PANDAS_AVAILABLE = False
+
+try:
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    MATPLOTLIB_AVAILABLE = True
+except ImportError:
+    MATPLOTLIB_AVAILABLE = False
+
+try:
+    import plotly.graph_objects as go
+    import plotly.express as px
+    PLOTLY_AVAILABLE = True
+except ImportError:
+    PLOTLY_AVAILABLE = False
+
+try:
+    from reportlab.lib.pagesizes import letter, A4
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib import colors
+    REPORTLAB_AVAILABLE = True
+except ImportError:
+    REPORTLAB_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
 class ReportingAgent:
-    """Enhanced Reporting Agent with AI insights and visualizations"""
+    """Enhanced Reporting Agent for comprehensive LCA analysis results"""
     
-    def __init__(self, cerebras_api_key: str = None, output_dir: str = None):
-        self.cerebras_api_key = cerebras_api_key or os.getenv("CEREBRAS_API_KEY")
-        self.llm = ChatCerebras(api_key=self.cerebras_api_key, model="qwen-3-32b") if self.cerebras_api_key else None
-        self.output_dir = Path(output_dir) if output_dir else Path("./reports")
-        self.output_dir.mkdir(exist_ok=True)
-        self.styles = getSampleStyleSheet()
-        plt.style.use('default')
-        sns.set_palette("husl")
+    def __init__(self):
+        # Create output directories
+        self.output_dir = Path("./output")
+        self.reports_dir = self.output_dir / "reports"
+        self.charts_dir = self.output_dir / "charts"
+        
+        for dir_path in [self.output_dir, self.reports_dir, self.charts_dir]:
+            dir_path.mkdir(exist_ok=True)
+        
+        # Configure plot styling if available
+        if MATPLOTLIB_AVAILABLE:
+            try:
+                plt.style.use('seaborn-v0_8')
+            except:
+                plt.style.use('default')
+        
+        if MATPLOTLIB_AVAILABLE and 'sns' in globals():
+            sns.set_palette("husl")
+        
+        # Report templates
+        self.report_templates = {
+            "technical": self._generate_technical_report,
+            "executive": self._generate_executive_report,
+            "regulatory": self._generate_regulatory_report
+        }
     
-    def generate_report(self, lca_results: Dict[str, Any], compliance_results: Dict[str, Any] = None,
-                       report_type: str = "technical", format_type: str = "pdf") -> Dict[str, Any]:
+    def generate_report(self, lca_results: Dict[str, Any], 
+                       compliance_results: Dict[str, Any] = None,
+                       report_type: str = "technical", 
+                       format_type: str = "pdf") -> Dict[str, Any]:
         """Generate comprehensive LCA report"""
         try:
-            if not lca_results or not lca_results.get("success"):
-                return {"error": "Invalid LCA results", "success": False}
+            logger.info(f"Generating {report_type} report in {format_type} format")
             
-            # Generate AI insights
-            ai_insights = self._generate_ai_insights(lca_results, compliance_results) if self.llm else {}
+            # Extract data from results
+            report_data = self._extract_report_data(lca_results, compliance_results)
             
-            # Create visualizations
-            visualizations = self._create_visualizations(lca_results)
+            # Generate visualizations
+            charts = self._create_visualizations(report_data)
             
             # Generate report content
-            content = self._generate_content(lca_results, compliance_results, ai_insights, report_type)
+            report_generator = self.report_templates.get(report_type, self._generate_technical_report)
+            report_content = report_generator(report_data, charts)
             
-            # Generate output files
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            # Create output files
             output_files = {}
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             
             if format_type in ["pdf", "all"]:
-                output_files["pdf"] = self._generate_pdf(content, visualizations, timestamp)
+                pdf_path = self._create_pdf_report(report_content, report_type, timestamp)
+                if pdf_path:
+                    output_files["pdf"] = pdf_path
+            
             if format_type in ["html", "all"]:
-                output_files["html"] = self._generate_html(content, visualizations, timestamp)
+                html_path = self._create_html_report(report_content, charts, report_type, timestamp)
+                output_files["html"] = html_path
+            
             if format_type in ["json", "all"]:
-                output_files["json"] = self._generate_json(content, lca_results, timestamp)
+                json_path = self._create_json_report(report_data, report_type, timestamp)
+                output_files["json"] = json_path
             
             return {
                 "success": True,
                 "report_type": report_type,
+                "format_type": format_type,
                 "output_files": output_files,
-                "visualizations_created": len(visualizations),
-                "timestamp": timestamp
+                "charts_created": list(charts.keys()),
+                "visualizations_created": len(charts),
+                "timestamp": datetime.now().isoformat()
             }
             
         except Exception as e:
             logger.error(f"Report generation error: {e}")
             return {"error": str(e), "success": False}
     
-    def _generate_ai_insights(self, lca_results: Dict[str, Any], compliance_results: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate AI insights for report"""
-        try:
-            lca_data = lca_results.get("lca_results", {})
-            params = lca_data.get("input_parameters", {})
-            gwp = lca_data.get("gwp_impact", {})
-            
-            summary = {
-                "metal_type": params.get("metal_type"),
-                "production_kg": params.get("production_kg"),
-                "recycled_fraction": params.get("recycled_fraction"),
-                "total_gwp": gwp.get("total_kg_co2_eq"),
-                "gwp_per_kg": gwp.get("kg_co2_eq_per_kg_metal"),
-                "compliance_score": compliance_results.get("overall_compliance_score", {}).get("overall_score") if compliance_results else None
-            }
-            
-            system_prompt = """You are an expert LCA consultant. Analyze the LCA results and provide:
-            1. Executive summary (2-3 sentences)
-            2. Key environmental findings (3-4 points)
-            3. Strategic recommendations (3-4 actionable items)
-            4. Risk assessment and opportunities
-            
-            Keep responses concise and professional."""
-            
-            messages = [
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=f"Analyze this LCA study: {json.dumps(summary, indent=2)}")
-            ]
-            
-            response = self.llm.invoke(messages)
-            analysis = response.content
-            
-            return {
-                "executive_summary": self._extract_section(analysis, "executive summary"),
-                "key_findings": self._extract_list_items(analysis, ["finding", "result", "shows"]),
-                "recommendations": self._extract_list_items(analysis, ["recommend", "should", "consider"]),
-                "full_analysis": analysis
-            }
-            
-        except Exception as e:
-            logger.error(f"AI insights error: {e}")
-            return {"error": str(e)}
-    
-    def _extract_section(self, text: str, section_name: str) -> str:
-        """Extract specific section from AI response"""
-        lines = text.split('\n')
-        for i, line in enumerate(lines):
-            if section_name.lower() in line.lower():
-                # Get next few lines
-                return ' '.join(lines[i+1:i+4]).strip()
-        return "Analysis summary not available"
-    
-    def _extract_list_items(self, text: str, keywords: List[str]) -> List[str]:
-        """Extract list items containing keywords"""
-        items = []
-        for line in text.split('\n'):
-            line = line.strip()
-            if any(keyword in line.lower() for keyword in keywords) and len(line) > 20:
-                items.append(line)
-        return items[:4]  # Top 4 items
-    
-    def _create_visualizations(self, lca_results: Dict[str, Any]) -> Dict[str, str]:
-        """Create key visualizations"""
-        visualizations = {}
+    def _extract_report_data(self, lca_results: Dict[str, Any], 
+                           compliance_results: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Extract and structure data for reporting"""
         
-        try:
-            # 1. GWP Breakdown Pie Chart
-            visualizations["gwp_breakdown"] = self._create_gwp_chart(lca_results)
-            
-            # 2. Production Mix Bar Chart
-            visualizations["production_mix"] = self._create_production_chart(lca_results)
-            
-            # 3. Sustainability Score Gauge
-            visualizations["sustainability"] = self._create_sustainability_chart(lca_results)
-            
-        except Exception as e:
-            logger.error(f"Visualization error: {e}")
+        # Handle different LCA result structures
+        lca_data = lca_results.get("lca_results", lca_results)
+        scenarios = lca_results.get("scenario_results", [])
+        input_params = lca_results.get("input_parameters", {})
         
-        return visualizations
-    
-    def _create_gwp_chart(self, lca_results: Dict[str, Any]) -> str:
-        """Create GWP breakdown pie chart"""
-        try:
-            emissions = lca_results.get("lca_results", {}).get("total_emissions", {})
-            gwp_values = {"CO2": 1.0, "CH4": 25.0, "N2O": 298.0, "CF4": 7390.0}
-            
-            gwp_data = {}
-            for gas, amount in emissions.items():
-                if gas in gwp_values and amount > 0:
-                    gwp_data[gas] = amount * gwp_values[gas]
-            
-            if not gwp_data:
-                return ""
-            
-            fig, ax = plt.subplots(figsize=(8, 6))
-            ax.pie(gwp_data.values(), labels=gwp_data.keys(), autopct='%1.1f%%', startangle=90)
-            ax.set_title('GWP Impact Breakdown', fontsize=14, fontweight='bold')
-            
-            chart_path = self.output_dir / f"gwp_breakdown_{datetime.now().strftime('%Y%m%d_%H%M')}.png"
-            plt.savefig(chart_path, dpi=300, bbox_inches='tight')
-            plt.close()
-            
-            return str(chart_path)
-            
-        except Exception:
-            return ""
-    
-    def _create_production_chart(self, lca_results: Dict[str, Any]) -> str:
-        """Create production mix bar chart"""
-        try:
-            breakdown = lca_results.get("lca_results", {}).get("production_breakdown", {})
-            primary = breakdown.get("primary_percentage", 0)
-            secondary = breakdown.get("secondary_percentage", 0)
-            
-            fig, ax = plt.subplots(figsize=(8, 6))
-            categories = ['Primary', 'Secondary\n(Recycled)']
-            values = [primary, secondary]
-            colors = ['#FF6B6B', '#4ECDC4']
-            
-            bars = ax.bar(categories, values, color=colors, alpha=0.8)
-            ax.set_ylabel('Percentage (%)')
-            ax.set_title('Production Mix', fontsize=14, fontweight='bold')
-            ax.set_ylim(0, 110)
-            
-            for bar, value in zip(bars, values):
-                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 2,
-                       f'{value:.1f}%', ha='center', fontweight='bold')
-            
-            chart_path = self.output_dir / f"production_mix_{datetime.now().strftime('%Y%m%d_%H%M')}.png"
-            plt.savefig(chart_path, dpi=300, bbox_inches='tight')
-            plt.close()
-            
-            return str(chart_path)
-            
-        except Exception:
-            return ""
-    
-    def _create_sustainability_chart(self, lca_results: Dict[str, Any]) -> str:
-        """Create sustainability score gauge"""
-        try:
-            sustainability = lca_results.get("ai_insights", {}).get("sustainability_score", {})
-            score = sustainability.get("overall_score", 0)
-            grade = sustainability.get("grade", "N/A")
-            
-            fig, ax = plt.subplots(figsize=(8, 6))
-            
-            # Create gauge-like visualization
-            sizes = [score, 100-score]
-            colors = ['#4ECDC4', '#E8E8E8']
-            wedges, _ = ax.pie(sizes, startangle=90, colors=colors, wedgeprops={'width': 0.4})
-            
-            ax.text(0, 0, f'{score:.1f}', ha='center', va='center', fontsize=24, fontweight='bold')
-            ax.text(0, -0.3, f'Grade: {grade}', ha='center', va='center', fontsize=16)
-            ax.text(0, 0.3, 'Sustainability Score', ha='center', va='center', fontsize=12)
-            
-            chart_path = self.output_dir / f"sustainability_{datetime.now().strftime('%Y%m%d_%H%M')}.png"
-            plt.savefig(chart_path, dpi=300, bbox_inches='tight')
-            plt.close()
-            
-            return str(chart_path)
-            
-        except Exception:
-            return ""
-    
-    def _generate_content(self, lca_results: Dict[str, Any], compliance_results: Dict[str, Any],
-                         ai_insights: Dict[str, Any], report_type: str) -> Dict[str, Any]:
-        """Generate structured report content"""
-        lca_data = lca_results.get("lca_results", {})
-        params = lca_data.get("input_parameters", {})
-        gwp = lca_data.get("gwp_impact", {})
+        # Extract key metrics
+        gwp_impact = lca_data.get("gwp_impact", {})
+        emissions_breakdown = lca_data.get("emissions_breakdown", {})
+        circularity = lca_data.get("circularity_metrics", {})
+        
+        # Extract material information
+        materials_info = []
+        if scenarios:
+            for scenario in scenarios:
+                materials_info.append({
+                    "material": scenario.get("material_type", "unknown"),
+                    "mass_kg": scenario.get("mass_kg", 0),
+                    "emissions_kg_co2e": scenario.get("total_emissions", {}).get("total_kg_co2e", 0),
+                    "circularity_index": scenario.get("circularity_metrics", {}).get("circularity_index", 0)
+                })
+        elif input_params.get("scenarios"):
+            for scenario in input_params["scenarios"]:
+                materials_info.append({
+                    "material": scenario.get("material_type", "unknown"),
+                    "mass_kg": scenario.get("mass_kg", 0),
+                    "emissions_kg_co2e": 0,  # Will be calculated
+                    "circularity_index": scenario.get("recycling", {}).get("secondary_content_existing_pct", 0) / 100
+                })
         
         return {
-            "title": f"LCA Report - {params.get('metal_type', 'Metal').title()} Production",
-            "date": datetime.now().strftime("%B %d, %Y"),
-            "executive_summary": ai_insights.get("executive_summary", "Environmental impact assessment completed."),
-            "key_results": [
-                f"Production analyzed: {params.get('production_kg', 0):,.0f} kg",
-                f"Recycled content: {params.get('recycled_fraction', 0)*100:.1f}%",
-                f"Total carbon footprint: {gwp.get('total_kg_co2_eq', 0):,.1f} kg CO2-eq",
-                f"Carbon intensity: {gwp.get('kg_co2_eq_per_kg_metal', 0):.2f} kg CO2-eq/kg"
-            ],
-            "findings": ai_insights.get("key_findings", []),
-            "recommendations": ai_insights.get("recommendations", []),
-            "compliance_status": compliance_results.get("overall_compliance_score", {}).get("status", "Not assessed") if compliance_results else "Not assessed",
-            "sustainability_score": lca_results.get("ai_insights", {}).get("sustainability_score", {}).get("overall_score", 0)
+            "analysis_info": {
+                "timestamp": lca_results.get("timestamp", datetime.now().isoformat()),
+                "analysis_type": lca_results.get("analysis_type", "cradle_to_gate"),
+                "study_type": input_params.get("study_type", "internal_decision_support"),
+                "scenarios_count": len(scenarios) or len(input_params.get("scenarios", []))
+            },
+            "materials_info": materials_info,
+            "carbon_footprint": {
+                "total_kg_co2e": gwp_impact.get("total_kg_co2_eq", 0),
+                "per_kg_material": gwp_impact.get("kg_co2_eq_per_kg_material", 0)
+            },
+            "emissions_breakdown": emissions_breakdown,
+            "circularity_metrics": circularity,
+            "sustainability_score": lca_results.get("ai_insights", {}).get("sustainability_score", {}),
+            "compliance_summary": self._extract_compliance_summary(compliance_results) if compliance_results else None,
+            "recommendations": lca_results.get("ai_insights", {}).get("key_recommendations", [])
         }
     
-    def _generate_pdf(self, content: Dict[str, Any], visualizations: Dict[str, str], timestamp: str) -> str:
-        """Generate PDF report"""
+    def _extract_compliance_summary(self, compliance_results: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract compliance summary for reporting"""
+        if not compliance_results or not compliance_results.get("success"):
+            return None
+        
+        overall_score = compliance_results.get("overall_compliance_score", {})
+        return {
+            "overall_score": overall_score.get("overall_score", 0),
+            "grade": overall_score.get("grade", "N/A"),
+            "status": overall_score.get("status", "Unknown"),
+            "study_type": compliance_results.get("study_type", "unknown")
+        }
+    
+    def _create_visualizations(self, report_data: Dict[str, Any]) -> Dict[str, str]:
+        """Create visualizations for the report"""
+        charts = {}
+        
         try:
-            pdf_path = self.output_dir / f"lca_report_{timestamp}.pdf"
-            doc = SimpleDocTemplate(str(pdf_path), pagesize=A4)
+            # 1. Emissions Breakdown Pie Chart
+            emissions = report_data["emissions_breakdown"]
+            if emissions and any(emissions.values()) and MATPLOTLIB_AVAILABLE:
+                charts["emissions_pie"] = self._create_emissions_pie_chart(emissions)
+            
+            # 2. Carbon Footprint Bar Chart (if multiple materials)
+            materials = report_data["materials_info"]
+            if len(materials) > 1 and MATPLOTLIB_AVAILABLE:
+                charts["materials_bar"] = self._create_materials_comparison_chart(materials)
+            
+            # 3. Circularity Index Chart
+            circularity = report_data["circularity_metrics"]
+            if circularity and PLOTLY_AVAILABLE:
+                charts["circularity_gauge"] = self._create_circularity_gauge(circularity)
+            
+            # 4. Sustainability Score Chart
+            sustainability = report_data["sustainability_score"]
+            if sustainability and PLOTLY_AVAILABLE:
+                charts["sustainability_radar"] = self._create_sustainability_radar(sustainability)
+            
+        except Exception as e:
+            logger.error(f"Visualization creation error: {e}")
+        
+        return charts
+    
+    def _create_emissions_pie_chart(self, emissions: Dict[str, float]) -> str:
+        """Create emissions breakdown pie chart"""
+        if not MATPLOTLIB_AVAILABLE:
+            return None
+            
+        # Filter out zero values
+        filtered_emissions = {k: v for k, v in emissions.items() if v > 0 and k != "total_kg_co2e"}
+        
+        if not filtered_emissions:
+            return None
+        
+        fig, ax = plt.subplots(figsize=(10, 8))
+        
+        labels = [k.replace("_kg_co2e", "").replace("_", " ").title() for k in filtered_emissions.keys()]
+        values = list(filtered_emissions.values())
+        colors = plt.cm.Set3(range(len(labels)))
+        
+        wedges, texts, autotexts = ax.pie(values, labels=labels, autopct='%1.1f%%', 
+                                         colors=colors, startangle=90)
+        
+        ax.set_title("Emissions Breakdown by Category", fontsize=16, fontweight='bold')
+        
+        # Save chart
+        chart_path = self.charts_dir / f"emissions_breakdown_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+        plt.savefig(chart_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        return str(chart_path)
+    
+    def _create_materials_comparison_chart(self, materials: List[Dict[str, Any]]) -> str:
+        """Create materials comparison bar chart"""
+        if not MATPLOTLIB_AVAILABLE or len(materials) < 2:
+            return None
+        
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+        
+        # Emissions comparison
+        materials_names = [m["material"].title() for m in materials]
+        emissions = [m["emissions_kg_co2e"] for m in materials]
+        
+        bars1 = ax1.bar(materials_names, emissions, color='steelblue', alpha=0.7)
+        ax1.set_title("Carbon Footprint by Material", fontweight='bold')
+        ax1.set_ylabel("kg CO₂-eq")
+        ax1.tick_params(axis='x', rotation=45)
+        
+        # Add value labels on bars
+        for bar, value in zip(bars1, emissions):
+            ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(emissions)*0.01,
+                    f'{value:.1f}', ha='center', va='bottom')
+        
+        # Circularity comparison
+        circularity = [m["circularity_index"] for m in materials]
+        bars2 = ax2.bar(materials_names, circularity, color='green', alpha=0.7)
+        ax2.set_title("Circularity Index by Material", fontweight='bold')
+        ax2.set_ylabel("Circularity Index")
+        ax2.set_ylim(0, 1)
+        ax2.tick_params(axis='x', rotation=45)
+        
+        # Add value labels on bars
+        for bar, value in zip(bars2, circularity):
+            ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.02,
+                    f'{value:.2f}', ha='center', va='bottom')
+        
+        plt.tight_layout()
+        
+        # Save chart
+        chart_path = self.charts_dir / f"materials_comparison_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+        plt.savefig(chart_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        return str(chart_path)
+    
+    def _create_circularity_gauge(self, circularity: Dict[str, Any]) -> str:
+        """Create circularity gauge chart"""
+        if not PLOTLY_AVAILABLE:
+            return None
+            
+        index = circularity.get("circularity_index", circularity.get("weighted_circularity_index", 0))
+        
+        fig = go.Figure(go.Indicator(
+            mode = "gauge+number+delta",
+            value = index,
+            domain = {'x': [0, 1], 'y': [0, 1]},
+            title = {'text': "Circularity Index"},
+            delta = {'reference': 0.5},
+            gauge = {
+                'axis': {'range': [None, 1]},
+                'bar': {'color': "darkblue"},
+                'steps': [
+                    {'range': [0, 0.25], 'color': "lightgray"},
+                    {'range': [0.25, 0.5], 'color': "yellow"},
+                    {'range': [0.5, 0.75], 'color': "orange"},
+                    {'range': [0.75, 1], 'color': "green"}],
+                'threshold': {
+                    'line': {'color': "red", 'width': 4},
+                    'thickness': 0.75,
+                    'value': 0.8}}))
+        
+        # Save chart
+        chart_path = self.charts_dir / f"circularity_gauge_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+        try:
+            fig.write_image(chart_path, width=800, height=600)
+            return str(chart_path)
+        except:
+            # Fallback if image export fails
+            return None
+    
+    def _create_sustainability_radar(self, sustainability: Dict[str, Any]) -> str:
+        """Create sustainability radar chart"""
+        if not PLOTLY_AVAILABLE:
+            return None
+            
+        categories = ['Overall Score', 'Emission Score', 'Circularity Score']
+        values = [
+            sustainability.get("overall_score", 0),
+            sustainability.get("emission_score", 0),
+            sustainability.get("circularity_score", 0)
+        ]
+        
+        fig = go.Figure()
+        
+        fig.add_trace(go.Scatterpolar(
+            r=values,
+            theta=categories,
+            fill='toself',
+            name='Sustainability Metrics'
+        ))
+        
+        fig.update_layout(
+            polar=dict(
+                radialaxis=dict(
+                    visible=True,
+                    range=[0, 100]
+                )),
+            showlegend=True,
+            title="Sustainability Assessment"
+        )
+        
+        # Save chart
+        chart_path = self.charts_dir / f"sustainability_radar_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+        try:
+            fig.write_image(chart_path, width=800, height=600)
+            return str(chart_path)
+        except:
+            # Fallback if image export fails
+            return None
+    
+    def _generate_technical_report(self, report_data: Dict[str, Any], 
+                                 charts: Dict[str, str]) -> Dict[str, Any]:
+        """Generate technical report content"""
+        analysis_info = report_data["analysis_info"]
+        carbon_footprint = report_data["carbon_footprint"]
+        materials = report_data["materials_info"]
+        
+        return {
+            "title": "Technical Life Cycle Assessment Report",
+            "sections": [
+                {
+                    "title": "Executive Summary",
+                    "content": f"""
+                    This technical LCA report presents a comprehensive analysis of {len(materials)} material scenario(s) 
+                    using {analysis_info['analysis_type']} methodology. The total carbon footprint is 
+                    {carbon_footprint['total_kg_co2e']:.1f} kg CO₂-eq with an intensity of 
+                    {carbon_footprint['per_kg_material']:.2f} kg CO₂-eq per kg of material.
+                    """
+                },
+                {
+                    "title": "Methodology",
+                    "content": f"""
+                    Analysis Type: {analysis_info['analysis_type'].replace('_', ' ').title()}
+                    Study Type: {analysis_info['study_type'].replace('_', ' ').title()}
+                    Standards: ISO 14040/14044
+                    Scenarios Analyzed: {analysis_info['scenarios_count']}
+                    """
+                },
+                {
+                    "title": "Results",
+                    "content": self._format_technical_results(report_data)
+                },
+                {
+                    "title": "Environmental Impact Assessment",
+                    "content": self._format_environmental_impacts(report_data)
+                },
+                {
+                    "title": "Recommendations",
+                    "content": "\n".join([f"• {rec}" for rec in report_data.get("recommendations", [])])
+                }
+            ],
+            "charts": charts
+        }
+    
+    def _generate_executive_report(self, report_data: Dict[str, Any], 
+                                 charts: Dict[str, str]) -> Dict[str, Any]:
+        """Generate executive summary report"""
+        carbon_footprint = report_data["carbon_footprint"]
+        sustainability = report_data["sustainability_score"]
+        
+        return {
+            "title": "Executive Summary - LCA Analysis",
+            "sections": [
+                {
+                    "title": "Key Findings",
+                    "content": f"""
+                    • Total Carbon Footprint: {carbon_footprint['total_kg_co2e']:.1f} kg CO₂-eq
+                    • Carbon Intensity: {carbon_footprint['per_kg_material']:.2f} kg CO₂-eq/kg
+                    • Sustainability Grade: {sustainability.get('grade', 'N/A')}
+                    • Overall Score: {sustainability.get('overall_score', 0):.1f}/100
+                    """
+                },
+                {
+                    "title": "Business Impact",
+                    "content": "Environmental performance assessment with actionable insights for sustainability improvement."
+                },
+                {
+                    "title": "Strategic Recommendations",
+                    "content": "\n".join([f"• {rec}" for rec in report_data.get("recommendations", [])[:3]])
+                }
+            ],
+            "charts": {k: v for k, v in charts.items() if k in ["emissions_pie", "sustainability_radar"]}
+        }
+    
+    def _generate_regulatory_report(self, report_data: Dict[str, Any], 
+                                  charts: Dict[str, str]) -> Dict[str, Any]:
+        """Generate regulatory compliance report"""
+        compliance = report_data["compliance_summary"]
+        
+        compliance_content = "Compliance assessment not available"
+        if compliance:
+            compliance_content = f"""
+            ISO 14040/14044 Compliance: {compliance.get('status', 'Unknown')}
+            Compliance Score: {compliance.get('overall_score', 0):.1%}
+            Grade: {compliance.get('grade', 'N/A')}
+            """
+        
+        return {
+            "title": "Regulatory Compliance Report",
+            "sections": [
+                {
+                    "title": "Compliance Status",
+                    "content": compliance_content
+                },
+                {
+                    "title": "Technical Specifications",
+                    "content": self._format_technical_results(report_data)
+                },
+                {
+                    "title": "Quality Assurance",
+                    "content": "Analysis conducted following ISO 14040/14044 methodology and standards."
+                }
+            ],
+            "charts": charts
+        }
+    
+    def _format_technical_results(self, report_data: Dict[str, Any]) -> str:
+        """Format technical results section"""
+        emissions = report_data["emissions_breakdown"]
+        circularity = report_data["circularity_metrics"]
+        
+        result_text = f"""
+        Carbon Footprint Breakdown:
+        • Production: {emissions.get('production_kg_co2e', 0):.1f} kg CO₂-eq
+        • Energy: {emissions.get('energy_kg_co2e', 0):.1f} kg CO₂-eq
+        • Transport: {emissions.get('transport_kg_co2e', 0):.1f} kg CO₂-eq
+        • End-of-Life: {emissions.get('end_of_life_kg_co2e', 0):.1f} kg CO₂-eq
+        
+        Circularity Metrics:
+        • Circularity Index: {circularity.get('circularity_index', circularity.get('weighted_circularity_index', 0)):.3f}
+        • Grade: {circularity.get('circularity_grade', 'N/A')}
+        """
+        
+        return result_text.strip()
+    
+    def _format_environmental_impacts(self, report_data: Dict[str, Any]) -> str:
+        """Format environmental impacts section"""
+        materials = report_data["materials_info"]
+        total_mass = sum(m["mass_kg"] for m in materials)
+        
+        return f"""
+        Materials Analyzed: {', '.join(set(m['material'].title() for m in materials))}
+        Total Mass: {total_mass:.1f} kg
+        Average Carbon Intensity: {report_data['carbon_footprint']['per_kg_material']:.2f} kg CO₂-eq/kg
+        Environmental Category: Climate Change (GWP 100-year)
+        """
+    
+    def _create_pdf_report(self, report_content: Dict[str, Any], 
+                          report_type: str, timestamp: str) -> str:
+        """Create PDF report"""
+        if not REPORTLAB_AVAILABLE:
+            logger.warning("ReportLab not available, skipping PDF generation")
+            return None
+            
+        filename = f"{report_type}_report_{timestamp}.pdf"
+        filepath = self.reports_dir / filename
+        
+        try:
+            doc = SimpleDocTemplate(str(filepath), pagesize=A4)
+            styles = getSampleStyleSheet()
             story = []
             
-            # Title and date
-            story.append(Paragraph(content["title"], self.styles['Title']))
-            story.append(Paragraph(f"Generated: {content['date']}", self.styles['Normal']))
-            story.append(Spacer(1, 20))
-            
-            # Executive Summary
-            story.append(Paragraph("Executive Summary", self.styles['Heading1']))
-            story.append(Paragraph(content["executive_summary"], self.styles['Normal']))
+            # Title
+            story.append(Paragraph(report_content["title"], styles['Title']))
             story.append(Spacer(1, 12))
             
-            # Key Results
-            story.append(Paragraph("Key Results", self.styles['Heading2']))
-            for result in content["key_results"]:
-                story.append(Paragraph(f"• {result}", self.styles['Normal']))
-            story.append(Spacer(1, 12))
-            
-            # Findings
-            if content["findings"]:
-                story.append(Paragraph("Key Findings", self.styles['Heading2']))
-                for finding in content["findings"]:
-                    story.append(Paragraph(f"• {finding}", self.styles['Normal']))
+            # Sections
+            for section in report_content["sections"]:
+                story.append(Paragraph(section["title"], styles['Heading2']))
+                story.append(Spacer(1, 6))
+                story.append(Paragraph(section["content"], styles['Normal']))
                 story.append(Spacer(1, 12))
-            
-            # Recommendations
-            if content["recommendations"]:
-                story.append(Paragraph("Recommendations", self.styles['Heading2']))
-                for rec in content["recommendations"]:
-                    story.append(Paragraph(f"• {rec}", self.styles['Normal']))
-                story.append(Spacer(1, 12))
-            
-            # Add visualizations
-            for viz_name, viz_path in visualizations.items():
-                if viz_path and Path(viz_path).exists():
-                    try:
-                        img = RLImage(viz_path, width=400, height=300)
-                        story.append(img)
-                        story.append(Spacer(1, 12))
-                    except Exception:
-                        continue
             
             doc.build(story)
-            return str(pdf_path)
-            
+            return str(filepath)
         except Exception as e:
             logger.error(f"PDF generation error: {e}")
-            return ""
+            return None
     
-    def _generate_html(self, content: Dict[str, Any], visualizations: Dict[str, str], timestamp: str) -> str:
-        """Generate HTML report"""
-        try:
-            html_path = self.output_dir / f"lca_report_{timestamp}.html"
-            
-            html_content = f"""
-<!DOCTYPE html>
-<html>
-<head>
-    <title>{content['title']}</title>
-    <style>
-        body {{ font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }}
-        h1 {{ color: #2E8B57; }}
-        h2 {{ color: #4169E1; }}
-        .chart {{ text-align: center; margin: 20px 0; }}
-        .chart img {{ max-width: 100%; }}
-    </style>
-</head>
-<body>
-    <h1>{content['title']}</h1>
-    <p><strong>Generated:</strong> {content['date']}</p>
+    def _create_html_report(self, report_content: Dict[str, Any], 
+                           charts: Dict[str, str], report_type: str, timestamp: str) -> str:
+        """Create HTML report"""
+        filename = f"{report_type}_report_{timestamp}.html"
+        filepath = self.reports_dir / filename
+        
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>{report_content['title']}</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 40px; }}
+                h1 {{ color: #2c3e50; }}
+                h2 {{ color: #34495e; }}
+                .chart {{ margin: 20px 0; }}
+            </style>
+        </head>
+        <body>
+            <h1>{report_content['title']}</h1>
+        """
+        
+        for section in report_content["sections"]:
+            html_content += f"""
+            <h2>{section['title']}</h2>
+            <p>{section['content'].replace(chr(10), '<br>')}</p>
+            """
+        
+        # Add charts
+        for chart_name, chart_path in charts.items():
+            if chart_path and Path(chart_path).exists():
+                html_content += f'<div class="chart"><img src="{chart_path}" alt="{chart_name}" style="max-width: 100%;"></div>'
+        
+        html_content += "</body></html>"
+        
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+        
+        return str(filepath)
     
-    <h2>Executive Summary</h2>
-    <p>{content['executive_summary']}</p>
-    
-    <h2>Key Results</h2>
-    <ul>{''.join(f'<li>{result}</li>' for result in content['key_results'])}</ul>
-    
-    <h2>Visualizations</h2>
-"""
-            
-            for viz_name, viz_path in visualizations.items():
-                if viz_path and Path(viz_path).exists():
-                    html_content += f'<div class="chart"><img src="{Path(viz_path).name}" alt="{viz_name}"></div>'
-            
-            html_content += "</body></html>"
-            
-            with open(html_path, 'w') as f:
-                f.write(html_content)
-            
-            return str(html_path)
-            
-        except Exception as e:
-            logger.error(f"HTML generation error: {e}")
-            return ""
-    
-    def _generate_json(self, content: Dict[str, Any], lca_results: Dict[str, Any], timestamp: str) -> str:
-        """Generate JSON data export"""
-        try:
-            json_path = self.output_dir / f"lca_data_{timestamp}.json"
-            
-            json_data = {
-                "report_metadata": {"timestamp": timestamp, "title": content["title"]},
-                "report_content": content,
-                "lca_results": lca_results
-            }
-            
-            with open(json_path, 'w') as f:
-                json.dump(json_data, f, indent=2, default=str)
-            
-            return str(json_path)
-            
-        except Exception as e:
-            logger.error(f"JSON generation error: {e}")
-            return ""
-
-# Tools
-@tool
-def generate_lca_report(lca_results: Dict[str, Any], compliance_results: Dict[str, Any] = None,
-                       report_type: str = "technical", format_type: str = "pdf") -> Dict[str, Any]:
-    """Generate comprehensive LCA report"""
-    agent = ReportingAgent()
-    return agent.generate_report(lca_results, compliance_results, report_type, format_type)
-
-@tool
-def create_lca_visualizations(lca_results: Dict[str, Any]) -> Dict[str, Any]:
-    """Create LCA visualizations"""
-    agent = ReportingAgent()
-    try:
-        visualizations = agent._create_visualizations(lca_results)
-        return {"success": True, "visualizations": visualizations}
-    except Exception as e:
-        return {"error": str(e), "success": False}
-
-@tool
-def export_lca_data(lca_results: Dict[str, Any], format_type: str = "json") -> Dict[str, Any]:
-    """Export LCA data in specified format"""
-    agent = ReportingAgent()
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-    if format_type == "json":
-        json_path = agent._generate_json({}, lca_results, timestamp)
-        return {"success": True, "export_file": json_path}
-    elif format_type == "csv":
-        try:
-            csv_path = agent.output_dir / f"lca_results_{timestamp}.csv"
-            lca_data = lca_results.get("lca_results", {})
-            
-            data = [{
-                "metal_type": lca_data.get("input_parameters", {}).get("metal_type"),
-                "production_kg": lca_data.get("input_parameters", {}).get("production_kg"),
-                "total_gwp": lca_data.get("gwp_impact", {}).get("total_kg_co2_eq"),
-                "gwp_per_kg": lca_data.get("gwp_impact", {}).get("kg_co2_eq_per_kg_metal")
-            }]
-            
-            pd.DataFrame(data).to_csv(csv_path, index=False)
-            return {"success": True, "export_file": str(csv_path)}
-        except Exception as e:
-            return {"error": str(e), "success": False}
-    else:
-        return {"error": f"Unsupported format: {format_type}", "success": False}
+    def _create_json_report(self, report_data: Dict[str, Any], 
+                           report_type: str, timestamp: str) -> str:
+        """Create JSON report"""
+        filename = f"{report_type}_report_{timestamp}.json"
+        filepath = self.reports_dir / filename
+        
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(report_data, f, indent=2, default=str)
+        
+        return str(filepath)

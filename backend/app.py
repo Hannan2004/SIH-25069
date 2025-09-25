@@ -1,36 +1,35 @@
 """
-Simple Streamlit App to test LCA Analysis System
-Tests all agents: Data Ingestion, LCA, Compliance, and Reporting with LangGraph workflow
+Streamlit MVP Dashboard for LCA Analysis System
+Professional dashboard to trigger agentic workflow with comprehensive input handling
 """
 
 import streamlit as st
-import json
-import os
-import sys
-from datetime import datetime
-from pathlib import Path
 import pandas as pd
-import tempfile
+import json
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import sys
+from pathlib import Path
+from datetime import datetime
+import time
+import os
 
 # Add current directory to path for imports
 current_dir = Path(__file__).parent
 sys.path.append(str(current_dir))
 
-# Import your agents
+# Import your main system
 try:
-    from lca_agent import LCAAgent
-    from data_ingestion_agent import DataIngestionAgent
-    from compliance_agent import ComplianceAgent
-    from reporting_agent import ReportingAgent
     from main import LCASystem, run_quick_lca_analysis, run_file_analysis
-    agents_available = True
+    SYSTEM_AVAILABLE = True
 except ImportError as e:
-    st.error(f"Error importing agents: {e}")
-    agents_available = False
+    st.error(f"System import error: {e}")
+    SYSTEM_AVAILABLE = False
 
-# Streamlit page config
+# Page configuration
 st.set_page_config(
-    page_title="LCA Analysis System Test",
+    page_title="LCA Analysis Dashboard",
     page_icon="🌍",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -39,669 +38,713 @@ st.set_page_config(
 # Custom CSS
 st.markdown("""
 <style>
+    .main-header {
+        background: linear-gradient(90deg, #2E8B57, #3CB371);
+        padding: 1rem;
+        border-radius: 10px;
+        color: white;
+        text-align: center;
+        margin-bottom: 2rem;
+    }
     .metric-card {
-        background-color: #f0f2f6;
+        background: white;
         padding: 1rem;
-        border-radius: 0.5rem;
-        border-left: 4px solid #1f77b4;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        border-left: 4px solid #2E8B57;
     }
-    .success-card {
-        background-color: #d4edda;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        border-left: 4px solid #28a745;
-    }
-    .error-card {
-        background-color: #f8d7da;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        border-left: 4px solid #dc3545;
+    .status-success { color: #28a745; font-weight: bold; }
+    .status-error { color: #dc3545; font-weight: bold; }
+    .status-warning { color: #ffc107; font-weight: bold; }
+    .workflow-step {
+        padding: 0.5rem;
+        margin: 0.25rem;
+        border-radius: 5px;
+        border-left: 3px solid #2E8B57;
+        background: #f8f9fa;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Title and description
-st.title("🌍 LCA Analysis System Test App")
-st.markdown("Test your LCA agents individually or run complete LangGraph workflow analysis")
+# Initialize session state
+if 'analysis_results' not in st.session_state:
+    st.session_state.analysis_results = None
+if 'analysis_history' not in st.session_state:
+    st.session_state.analysis_history = []
 
-# Sidebar for navigation
-st.sidebar.title("🧪 Test Options")
-test_mode = st.sidebar.selectbox(
-    "Select Test Mode:",
-    ["Complete LangGraph Workflow", "Individual Agents", "File Upload Test", "Agent Status Check"]
-)
-
-# Check if agents are available
-if not agents_available:
-    st.error("❌ Agents not available. Please check your imports and dependencies.")
-    st.stop()
-
-# Agent Status Check
-if test_mode == "Agent Status Check":
-    st.header("🔍 Agent Status Check")
+def main():
+    # Header
+    st.markdown("""
+    <div class="main-header">
+        <h1>🌍 LCA Analysis Dashboard</h1>
+        <p>Comprehensive Life Cycle Assessment with AI-Powered Insights</p>
+    </div>
+    """, unsafe_allow_html=True)
     
-    col1, col2, col3, col4 = st.columns(4)
+    if not SYSTEM_AVAILABLE:
+        st.error("❌ LCA System not available. Please check the backend setup.")
+        return
     
-    # Test each agent
-    agents_status = {}
+    # Sidebar for navigation
+    st.sidebar.title("📊 Navigation")
+    tab_selection = st.sidebar.radio(
+        "Select Analysis Mode:",
+        ["🚀 Quick Analysis", "📁 File Upload", "📈 Advanced Setup", "📋 Results Dashboard"]
+    )
+    
+    # Main content based on selection
+    if tab_selection == "🚀 Quick Analysis":
+        quick_analysis_tab()
+    elif tab_selection == "📁 File Upload":
+        file_upload_tab()
+    elif tab_selection == "📈 Advanced Setup":
+        advanced_setup_tab()
+    elif tab_selection == "📋 Results Dashboard":
+        results_dashboard_tab()
+
+def quick_analysis_tab():
+    st.header("🚀 Quick LCA Analysis")
+    st.markdown("Get rapid insights with default parameters for common materials")
+    
+    col1, col2 = st.columns([2, 1])
     
     with col1:
-        st.subheader("LCA Agent")
-        try:
-            lca_agent = LCAAgent()
-            agents_status["LCA Agent"] = "✅ Ready"
-            st.success("✅ Ready")
-            st.write("Methods available:")
-            st.write("• `perform_lca_analysis()`")
-        except Exception as e:
-            agents_status["LCA Agent"] = f"❌ Error: {str(e)[:50]}..."
-            st.error(f"❌ Error: {str(e)[:50]}...")
-    
-    with col2:
-        st.subheader("Data Ingestion Agent")
-        try:
-            di_agent = DataIngestionAgent()
-            agents_status["Data Ingestion Agent"] = "✅ Ready"
-            st.success("✅ Ready")
-            st.write("Methods available:")
-            st.write("• `ingest_data()`")
-            st.write("• `preprocess_data()`")
-        except Exception as e:
-            agents_status["Data Ingestion Agent"] = f"❌ Error: {str(e)[:50]}..."
-            st.error(f"❌ Error: {str(e)[:50]}...")
-    
-    with col3:
-        st.subheader("Compliance Agent")
-        try:
-            compliance_agent = ComplianceAgent()
-            agents_status["Compliance Agent"] = "✅ Ready"
-            st.success("✅ Ready")
-            st.write("Methods available:")
-            st.write("• `check_lca_compliance()`")
-        except Exception as e:
-            agents_status["Compliance Agent"] = f"❌ Error: {str(e)[:50]}..."
-            st.error(f"❌ Error: {str(e)[:50]}...")
-    
-    with col4:
-        st.subheader("Reporting Agent")
-        try:
-            reporting_agent = ReportingAgent()
-            agents_status["Reporting Agent"] = "✅ Ready"
-            st.success("✅ Ready")
-            st.write("Methods available:")
-            st.write("• `generate_report()`")
-        except Exception as e:
-            agents_status["Reporting Agent"] = f"❌ Error: {str(e)[:50]}..."
-            st.error(f"❌ Error: {str(e)[:50]}...")
-    
-    # LangGraph Workflow Test
-    st.header("🔄 LangGraph Workflow Status")
-    try:
-        lca_system = LCASystem()
-        st.success("✅ LangGraph workflow initialized successfully")
-        st.write("Workflow nodes:")
-        st.write("• Data Ingestion → LCA Analysis → Compliance Check → Report Generation")
-    except Exception as e:
-        st.error(f"❌ LangGraph workflow error: {str(e)}")
-    
-    # Environment check
-    st.header("🔧 Environment Check")
-    env_status = {}
-    
-    env_vars = ["CEREBRAS_API_KEY", "PINECONE_API_KEY", "PINECONE_ENVIRONMENT"]
-    cols = st.columns(len(env_vars))
-    
-    for i, var in enumerate(env_vars):
-        with cols[i]:
-            value = os.getenv(var)
-            if value:
-                env_status[var] = "✅ Set"
-                st.success(f"✅ {var}")
-                st.write("Set")
-            else:
-                env_status[var] = "⚠️ Not set"
-                st.warning(f"⚠️ {var}")
-                st.write("Not set")
-    
-    # Summary
-    st.header("📊 Status Summary")
-    with st.expander("View Detailed Status"):
-        st.json({**agents_status, **env_status})
-
-# Individual Agent Testing
-elif test_mode == "Individual Agents":
-    st.header("🧪 Individual Agent Testing")
-    
-    agent_choice = st.selectbox(
-        "Select Agent to Test:",
-        ["LCA Agent", "Data Ingestion Agent", "Compliance Agent", "Reporting Agent"]
-    )
-    
-    if agent_choice == "LCA Agent":
-        st.subheader("🏭 LCA Agent Test")
+        st.subheader("Input Parameters")
         
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            metal_type = st.selectbox("Metal Type:", ["steel", "aluminum", "copper", "zinc"])
-            production_kg = st.number_input("Production (kg):", min_value=1.0, value=1000.0)
-        
-        with col2:
-            recycled_fraction = st.slider("Recycled Fraction:", 0.0, 1.0, 0.3)
-            region = st.selectbox("Region:", ["US_average", "EU_average", "China", "Global_average"])
-        
-        if st.button("🚀 Test LCA Agent"):
-            with st.spinner("Running LCA calculation..."):
-                try:
-                    lca_agent = LCAAgent()
-                    result = lca_agent.perform_lca_analysis(  # Fixed method name
-                        metal_type=metal_type,
-                        production_kg=production_kg,
-                        recycled_fraction=recycled_fraction,
-                        region=region
-                    )
-                    
-                    if result.get("success"):
-                        st.success("✅ LCA Agent working correctly!")
-                        
-                        # Display key results
-                        lca_data = result.get("lca_results", {})
-                        gwp_impact = lca_data.get("gwp_impact", {})
-                        
-                        col1, col2, col3 = st.columns(3)
-                        with col1:
-                            st.metric("Total GWP", f"{gwp_impact.get('total_kg_co2_eq', 0):,.1f} kg CO₂-eq")
-                        with col2:
-                            st.metric("GWP per kg", f"{gwp_impact.get('kg_co2_eq_per_kg_metal', 0):.2f} kg CO₂-eq/kg")
-                        with col3:
-                            sustainability = result.get("ai_insights", {}).get("sustainability_score", {})
-                            st.metric("Sustainability Score", f"{sustainability.get('overall_score', 0):.1f}/100")
-                        
-                        # Show detailed results
-                        with st.expander("📋 Detailed Results"):
-                            st.json(result)
-                    else:
-                        st.error(f"❌ LCA Agent failed: {result.get('error', 'Unknown error')}")
-                        
-                except Exception as e:
-                    st.error(f"❌ Error testing LCA Agent: {str(e)}")
-    
-    elif agent_choice == "Data Ingestion Agent":
-        st.subheader("📊 Data Ingestion Agent Test")
-        
-        # Create sample CSV data for testing
-        st.write("**Test with sample data:**")
-        
-        sample_data = {
-            "Metal_Type": ["aluminum", "steel", "copper"],
-            "Production_kg": [1000, 2000, 500],
-            "Recycled_Fraction": [0.3, 0.25, 0.4],
-            "Region": ["US_average", "EU_average", "China"]
-        }
-        
-        # Show sample data
-        df = pd.DataFrame(sample_data)
-        st.dataframe(df)
-        
-        if st.button("🔍 Test Data Ingestion Agent"):
-            with st.spinner("Testing data ingestion..."):
-                try:
-                    # Save sample data to temporary file
-                    with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv') as f:
-                        df.to_csv(f.name, index=False)
-                        temp_file_path = f.name
-                    
-                    di_agent = DataIngestionAgent()
-                    result = di_agent.ingest_data(
-                        file_path=temp_file_path,
-                        file_type="csv"
-                    )
-                    
-                    # Clean up temp file
-                    os.unlink(temp_file_path)
-                    
-                    if result.get("success"):
-                        st.success("✅ Data Ingestion Agent working correctly!")
-                        
-                        # Display key metrics
-                        col1, col2, col3 = st.columns(3)
-                        with col1:
-                            st.metric("Records Processed", result.get("records_count", 0))
-                        with col2:
-                            data_quality = result.get("data_quality", {})
-                            st.metric("Data Quality", f"{data_quality.get('completeness', 0):.1%}")
-                        with col3:
-                            st.metric("Processing Status", "✅ Success")
-                        
-                        # Show processed data
-                        processed_data = result.get("processed_data", {})
-                        if processed_data:
-                            with st.expander("📋 Processed Data"):
-                                st.json(processed_data)
-                    else:
-                        st.error(f"❌ Data Ingestion Agent failed: {result.get('error', 'Unknown error')}")
-                        
-                except Exception as e:
-                    st.error(f"❌ Error testing Data Ingestion Agent: {str(e)}")
-    
-    elif agent_choice == "Compliance Agent":
-        st.subheader("📋 Compliance Agent Test")
-        
-        study_type = st.selectbox(
-            "Study Type:",
-            ["internal_decision_support", "comparative_assertion", "public_communication"]
+        # Basic parameters
+        material_type = st.selectbox(
+            "Material Type",
+            ["aluminum", "steel", "copper", "zinc", "lead", "nickel", "tin", "magnesium", "titanium"],
+            help="Select the primary material for analysis"
         )
         
-        # Create sample LCA data for testing
-        sample_data = {
-            "functional_unit": "1 kg of aluminum",
-            "system_boundaries": "cradle-to-gate",
-            "goal": "Environmental impact assessment",
-            "scope": "Primary aluminum production",
-            "lca_results": {
-                "input_parameters": {
-                    "metal_type": "aluminum",
-                    "production_kg": 1000
-                },
-                "gwp_impact": {
-                    "total_kg_co2_eq": 15000
-                }
-            },
-            "impact_categories": ["climate_change", "acidification"],
-            "methodology": "ISO 14040/14044",
-            "data_sources": ["EcoInvent"]
-        }
+        mass_kg = st.number_input(
+            "Mass (kg)",
+            min_value=0.1,
+            max_value=10000.0,
+            value=1000.0,
+            step=10.0,
+            help="Total mass of material to analyze"
+        )
         
-        # Show sample data
-        with st.expander("📋 Sample LCA Study Data"):
-            st.json(sample_data)
+        recycled_content = st.slider(
+            "Recycled Content (%)",
+            min_value=0,
+            max_value=100,
+            value=30,
+            help="Percentage of recycled content in the material"
+        )
         
-        if st.button("✅ Test Compliance Agent"):
-            with st.spinner("Checking ISO compliance..."):
-                try:
-                    compliance_agent = ComplianceAgent()
-                    result = compliance_agent.check_lca_compliance(sample_data, study_type)
-                    
-                    if result.get("success"):
-                        st.success("✅ Compliance Agent working correctly!")
-                        
-                        # Display compliance score
-                        overall_score = result.get("overall_compliance_score", {})
-                        
-                        col1, col2, col3 = st.columns(3)
-                        with col1:
-                            st.metric("Compliance Grade", overall_score.get("grade", "N/A"))
-                        with col2:
-                            st.metric("Overall Score", f"{overall_score.get('overall_score', 0):.1%}")
-                        with col3:
-                            st.metric("Status", overall_score.get("status", "Unknown"))
-                        
-                        # Show compliance report
-                        compliance_report = result.get("compliance_report", "")
-                        if compliance_report:
-                            with st.expander("📄 Compliance Report"):
-                                st.text(compliance_report)
-                        
-                        with st.expander("📋 Detailed Compliance Results"):
-                            st.json(result)
-                    else:
-                        st.error(f"❌ Compliance Agent failed: {result.get('error', 'Unknown error')}")
-                        
-                except Exception as e:
-                    st.error(f"❌ Error testing Compliance Agent: {str(e)}")
+        transport_distance = st.number_input(
+            "Transport Distance (km)",
+            min_value=0,
+            max_value=5000,
+            value=100,
+            help="Distance for material transport"
+        )
+        
+        renewable_energy = st.slider(
+            "Grid Renewable Energy (%)",
+            min_value=0,
+            max_value=100,
+            value=30,
+            help="Percentage of renewable energy in the grid"
+        )
     
-    elif agent_choice == "Reporting Agent":
-        st.subheader("📄 Reporting Agent Test")
+    with col2:
+        st.subheader("Analysis Settings")
         
-        col1, col2 = st.columns(2)
+        analysis_type = st.selectbox(
+            "Analysis Scope",
+            ["cradle_to_gate", "cradle_to_grave", "gate_to_gate"],
+            help="Define the system boundaries for analysis"
+        )
         
-        with col1:
-            report_type = st.selectbox("Report Type:", ["technical", "executive", "regulatory"])
-        with col2:
-            format_type = st.selectbox("Format:", ["pdf", "html", "json", "all"])
-        
-        # Create sample data for testing
-        sample_lca_results = {
-            "success": True,
-            "lca_results": {
-                "input_parameters": {
-                    "metal_type": "aluminum",
-                    "production_kg": 1000,
-                    "recycled_fraction": 0.3
-                },
-                "gwp_impact": {
-                    "total_kg_co2_eq": 15000,
-                    "kg_co2_eq_per_kg_metal": 15.0
-                },
-                "total_emissions": {
-                    "CO2": 12000,
-                    "CH4": 100,
-                    "N2O": 50
-                },
-                "production_breakdown": {
-                    "primary_percentage": 70,
-                    "secondary_percentage": 30
-                }
-            },
-            "ai_insights": {
-                "sustainability_score": {
-                    "overall_score": 75,
-                    "grade": "B"
-                }
-            }
-        }
-        
-        sample_compliance_results = {
-            "overall_compliance_score": {
-                "overall_score": 0.85,
-                "grade": "B",
-                "status": "Largely Compliant"
-            }
-        }
-        
-        if st.button("📊 Test Reporting Agent"):
-            with st.spinner("Generating report..."):
-                try:
-                    reporting_agent = ReportingAgent()
-                    result = reporting_agent.generate_report(
-                        lca_results=sample_lca_results,
-                        compliance_results=sample_compliance_results,
-                        report_type=report_type,
-                        format_type=format_type
-                    )
-                    
-                    if result.get("success"):
-                        st.success("✅ Reporting Agent working correctly!")
-                        
-                        # Display generation info
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.metric("Files Generated", len(result.get("output_files", {})))
-                        with col2:
-                            st.metric("Visualizations", result.get("visualizations_created", 0))
-                        
-                        # Show generated files
-                        output_files = result.get("output_files", {})
-                        if output_files:
-                            st.write("📁 Generated Files:")
-                            for format_name, file_path in output_files.items():
-                                if file_path and Path(file_path).exists():
-                                    st.write(f"• {format_name.upper()}: ✅ {Path(file_path).name}")
-                                elif file_path:
-                                    st.write(f"• {format_name.upper()}: ⚠️ {Path(file_path).name} (file not found)")
-                        
-                        with st.expander("📋 Report Generation Details"):
-                            st.json(result)
-                    else:
-                        st.error(f"❌ Reporting Agent failed: {result.get('error', 'Unknown error')}")
-                        
-                except Exception as e:
-                    st.error(f"❌ Error testing Reporting Agent: {str(e)}")
+        study_type = st.selectbox(
+            "Study Type",
+            ["internal_decision_support", "comparative_assertion", "public_communication"],
+            help="Purpose of the LCA study"
+        )
+    
+    # Analysis button
+    if st.button("🔍 Run Quick Analysis", type="primary", use_container_width=True):
+        run_quick_analysis(material_type, mass_kg, recycled_content, transport_distance, renewable_energy, analysis_type, study_type)
 
-# File Upload Test
-elif test_mode == "File Upload Test":
-    st.header("📁 File Upload Test")
+def file_upload_tab():
+    st.header("📁 File Upload Analysis")
+    st.markdown("Upload your comprehensive LCA data file (CSV or Excel)")
     
-    st.markdown("Test the file upload functionality with your data ingestion agent")
+    # File upload section
+    col1, col2 = st.columns([2, 1])
     
-    # File uploader
-    uploaded_file = st.file_uploader(
-        "Choose a CSV or Excel file",
-        type=['csv', 'xlsx', 'xls'],
-        help="Upload a file with columns: Metal_Type, Production_kg, Recycled_Fraction, Region"
-    )
-    
-    if uploaded_file is not None:
-        # Show file details
-        st.write(f"**File:** {uploaded_file.name}")
-        st.write(f"**Size:** {uploaded_file.size} bytes")
-        st.write(f"**Type:** {uploaded_file.type}")
+    with col1:
+        uploaded_file = st.file_uploader(
+            "Choose LCA Data File",
+            type=['csv', 'xlsx', 'xls'],
+            help="Upload CSV or Excel file with comprehensive LCA parameters"
+        )
         
-        # Preview the data
-        try:
-            if uploaded_file.name.endswith('.csv'):
-                df = pd.read_csv(uploaded_file)
-            else:
-                df = pd.read_excel(uploaded_file)
-            
-            st.write("**Data Preview:**")
-            st.dataframe(df.head())
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Rows", len(df))
-            with col2:
-                st.metric("Columns", len(df.columns))
+        if uploaded_file is not None:
+            # Preview the uploaded file
+            try:
+                if uploaded_file.name.endswith('.csv'):
+                    df = pd.read_csv(uploaded_file)
+                else:
+                    df = pd.read_excel(uploaded_file)
                 
-        except Exception as e:
-            st.error(f"Error reading file: {str(e)}")
-            
-        # Test file analysis
-        if st.button("🔍 Test File Analysis"):
-            with st.spinner("Processing uploaded file..."):
-                try:
-                    # Save uploaded file temporarily
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file.name).suffix) as tmp_file:
-                        tmp_file.write(uploaded_file.getvalue())
-                        temp_path = tmp_file.name
-                    
-                    # Run file analysis
-                    result = run_file_analysis(temp_path, "excel" if uploaded_file.name.endswith(('.xlsx', '.xls')) else "csv")
-                    
-                    # Clean up
-                    os.unlink(temp_path)
-                    
-                    if result.get("success"):
-                        st.success("✅ File analysis completed successfully!")
-                        
-                        # Show results summary
-                        summary = result.get("summary", {})
-                        col1, col2, col3 = st.columns(3)
-                        
-                        with col1:
-                            lca_summary = summary.get("lca_summary", {})
-                            st.metric("Carbon Footprint", f"{lca_summary.get('total_carbon_footprint_kg_co2_eq', 0):,.1f} kg CO₂-eq")
-                        
-                        with col2:
-                            compliance_summary = summary.get("compliance_summary", {})
-                            st.metric("Compliance Grade", compliance_summary.get('compliance_grade', 'N/A'))
-                        
-                        with col3:
-                            report_summary = summary.get("report_summary", {})
-                            st.metric("Reports Generated", report_summary.get('formats_generated', 0))
-                        
-                        with st.expander("📊 Complete Analysis Results"):
-                            st.json(result)
-                            
-                    else:
-                        st.error(f"❌ File analysis failed: {result.get('error', 'Unknown error')}")
-                        
-                except Exception as e:
-                    st.error(f"❌ Error in file analysis: {str(e)}")
-    else:
-        # Show sample file format
-        st.info("💡 **Sample file format:**")
-        sample_df = pd.DataFrame({
-            'Metal_Type': ['aluminum', 'steel', 'copper'],
-            'Production_kg': [1000, 2000, 500],
-            'Recycled_Fraction': [0.3, 0.25, 0.4],
-            'Region': ['US_average', 'EU_average', 'China']
-        })
-        st.dataframe(sample_df)
+                st.subheader("📋 Data Preview")
+                st.dataframe(df.head())
+                
+                st.subheader("📊 Data Summary")
+                col_a, col_b, col_c = st.columns(3)
+                with col_a:
+                    st.metric("Rows", len(df))
+                with col_b:
+                    st.metric("Columns", len(df.columns))
+                with col_c:
+                    st.metric("Materials", df['Material'].nunique() if 'Material' in df.columns else 'N/A')
+                
+            except Exception as e:
+                st.error(f"Error reading file: {e}")
+                return
+    
+    with col2:
+        st.subheader("Analysis Settings")
+        
+        analysis_type = st.selectbox(
+            "Analysis Scope",
+            ["cradle_to_gate", "cradle_to_grave", "gate_to_gate"],
+            key="file_analysis_type"
+        )
+        
+        study_type = st.selectbox(
+            "Study Type",
+            ["internal_decision_support", "comparative_assertion", "public_communication"],
+            key="file_study_type"
+        )
+        
+        report_format = st.multiselect(
+            "Report Formats",
+            ["pdf", "html", "json"],
+            default=["pdf", "json"],
+            help="Select output formats for the report"
+        )
+    
+    # Analysis button
+    if uploaded_file is not None:
+        if st.button("📊 Analyze File Data", type="primary", use_container_width=True):
+            run_file_analysis_workflow(uploaded_file, analysis_type, study_type, report_format)
 
-# Complete LangGraph Workflow Testing
-elif test_mode == "Complete LangGraph Workflow":
-    st.header("🔄 Complete LCA Analysis with LangGraph Workflow")
+def advanced_setup_tab():
+    st.header("📈 Advanced LCA Setup")
+    st.markdown("Configure detailed parameters for comprehensive analysis")
     
-    st.markdown("Test the entire LangGraph workflow: **Data Ingestion → LCA Analysis → Compliance Check → Report Generation**")
+    # Material Configuration
+    st.subheader("🏭 Material Configuration")
+    col1, col2 = st.columns(2)
     
-    # Input parameters
+    with col1:
+        material_type = st.selectbox(
+            "Material Type",
+            ["aluminum", "steel", "copper", "zinc", "lead", "nickel", "tin", "magnesium", "titanium"],
+            key="adv_material"
+        )
+        mass_kg = st.number_input("Mass (kg)", value=1000.0, key="adv_mass")
+    
+    with col2:
+        ei_process = st.number_input("Energy Intensity - Virgin (kWh/kg)", value=15.0, key="adv_ei_virgin")
+        ei_recycled = st.number_input("Energy Intensity - Recycled (kWh/kg)", value=3.0, key="adv_ei_recycled")
+    
+    # Energy and Emissions
+    st.subheader("⚡ Energy & Emissions")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        ef_direct = st.number_input("Direct Emissions - Virgin (kg CO2e/kg)", value=2.0)
+        ef_direct_recycled = st.number_input("Direct Emissions - Recycled (kg CO2e/kg)", value=0.5)
+    
+    with col2:
+        virgin_ef = st.number_input("Virgin Material EF (kg CO2e/kg)", value=11.5)
+        secondary_ef = st.number_input("Secondary Material EF (kg CO2e/kg)", value=0.64)
+    
+    # Grid Composition
+    st.subheader("🔌 Grid Composition (%)")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        coal_pct = st.number_input("Coal", value=30.0, min_value=0.0, max_value=100.0)
+        gas_pct = st.number_input("Gas", value=40.0, min_value=0.0, max_value=100.0)
+    
+    with col2:
+        oil_pct = st.number_input("Oil", value=5.0, min_value=0.0, max_value=100.0)
+        nuclear_pct = st.number_input("Nuclear", value=10.0, min_value=0.0, max_value=100.0)
+    
+    with col3:
+        hydro_pct = st.number_input("Hydro", value=5.0, min_value=0.0, max_value=100.0)
+        wind_pct = st.number_input("Wind", value=5.0, min_value=0.0, max_value=100.0)
+    
+    with col4:
+        solar_pct = st.number_input("Solar", value=3.0, min_value=0.0, max_value=100.0)
+        other_pct = st.number_input("Other", value=2.0, min_value=0.0, max_value=100.0)
+    
+    # Transport Parameters
+    st.subheader("🚚 Transport Parameters")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        transport_mode = st.selectbox("Transport Mode", ["truck", "ship", "rail", "air"])
+        transport_distance = st.number_input("Distance (km)", value=100.0)
+    
+    with col2:
+        transport_weight = st.number_input("Weight (tonne)", value=1.0)
+        transport_ef = st.number_input("Transport EF (kg CO2e/tkm)", value=0.062)
+    
+    # Recycling Parameters
+    st.subheader("♻️ Recycling Parameters")
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        metal_type = st.selectbox("Metal Type:", ["steel", "aluminum", "copper", "zinc"])
-        production_kg = st.number_input("Production (kg):", min_value=1.0, value=1000.0)
+        collection_rate = st.slider("Collection Rate (%)", 0, 100, 75)
     
     with col2:
-        recycled_fraction = st.slider("Recycled Fraction:", 0.0, 1.0, 0.3)
-        region = st.selectbox("Region:", ["US_average", "EU_average", "China"])
+        recycling_efficiency = st.slider("Recycling Efficiency (%)", 0, 100, 90)
     
     with col3:
-        study_type = st.selectbox("Study Type:", ["internal_decision_support", "comparative_assertion"])
-        report_format = st.selectbox("Report Format:", ["pdf", "html", "json", "all"])
+        secondary_content = st.slider("Existing Secondary Content (%)", 0, 100, 30)
     
-    if st.button("🚀 Run Complete LangGraph Workflow", type="primary"):
-        # Progress tracking
+    # Analysis Settings
+    st.subheader("⚙️ Analysis Settings")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        analysis_type = st.selectbox("Analysis Type", ["cradle_to_gate", "cradle_to_grave"], key="adv_analysis_type")
+    
+    with col2:
+        study_type = st.selectbox("Study Type", ["internal_decision_support", "comparative_assertion", "public_communication"], key="adv_study_type")
+    
+    with col3:
+        report_type = st.selectbox("Report Type", ["technical", "executive", "regulatory"])
+    
+    # Run Analysis
+    if st.button("🔬 Run Advanced Analysis", type="primary", use_container_width=True):
+        
+        # Validate grid composition
+        total_grid = coal_pct + gas_pct + oil_pct + nuclear_pct + hydro_pct + wind_pct + solar_pct + other_pct
+        if abs(total_grid - 100) > 5:
+            st.warning(f"⚠️ Grid composition sums to {total_grid:.1f}%. Should be close to 100%.")
+        
+        # Create comprehensive input data
+        input_data = {
+            "scenarios": [{
+                "material_type": material_type,
+                "mass_kg": mass_kg,
+                "energy_intensity": {
+                    "virgin_process_kwh_per_kg": ei_process,
+                    "recycled_process_kwh_per_kg": ei_recycled
+                },
+                "direct_emissions": {
+                    "virgin_kg_co2e_per_kg": ef_direct,
+                    "recycled_kg_co2e_per_kg": ef_direct_recycled
+                },
+                "grid_composition": {
+                    "coal_pct": coal_pct, "gas_pct": gas_pct, "oil_pct": oil_pct,
+                    "nuclear_pct": nuclear_pct, "hydro_pct": hydro_pct,
+                    "wind_pct": wind_pct, "solar_pct": solar_pct, "other_pct": other_pct
+                },
+                "transport": {
+                    "mode": transport_mode,
+                    "distance_km": transport_distance,
+                    "weight_t": transport_weight,
+                    "emission_factor_kg_co2e_per_tkm": transport_ef
+                },
+                "material_emission_factors": {
+                    "virgin_kg_co2e_per_kg": virgin_ef,
+                    "secondary_kg_co2e_per_kg": secondary_ef
+                },
+                "recycling": {
+                    "collection_rate_pct": collection_rate,
+                    "recycling_efficiency_pct": recycling_efficiency,
+                    "secondary_content_existing_pct": secondary_content
+                }
+            }],
+            "analysis_type": analysis_type,
+            "study_type": study_type,
+            "report_type": report_type,
+            "format_type": "all"
+        }
+        
+        run_advanced_analysis(input_data)
+
+def run_quick_analysis(material_type, mass_kg, recycled_content, transport_distance, renewable_energy, analysis_type, study_type):
+    """Run quick analysis and display results"""
+    
+    with st.spinner("🔄 Running LCA Analysis Workflow..."):
+        # Create progress bar
         progress_bar = st.progress(0)
         status_text = st.empty()
         
-        # Results containers
-        results_container = st.container()
+        # Simulate workflow steps
+        steps = [
+            "Initializing system...",
+            "Processing input data...",
+            "Running LCA calculations...",
+            "Checking compliance...",
+            "Generating reports..."
+        ]
+        
+        for i, step in enumerate(steps):
+            status_text.text(step)
+            progress_bar.progress((i + 1) / len(steps))
+            time.sleep(0.5)  # Simulate processing time
         
         try:
-            # Initialize LCA System with LangGraph
-            status_text.text("Initializing LangGraph workflow...")
-            progress_bar.progress(10)
+            # Run analysis using the imported function
+            system = LCASystem()
             
-            lca_system = LCASystem()
-            
-            # Prepare input data
+            # Create input data for quick analysis
             input_data = {
-                "metal_type": metal_type,
-                "production_kg": production_kg,
-                "recycled_fraction": recycled_fraction,
-                "region": region,
+                "scenarios": [{
+                    "material_type": material_type.lower(),
+                    "mass_kg": mass_kg,
+                    "energy_intensity": {"virgin_process_kwh_per_kg": 15.0, "recycled_process_kwh_per_kg": 3.0},
+                    "direct_emissions": {"virgin_kg_co2e_per_kg": 2.0, "recycled_kg_co2e_per_kg": 0.5},
+                    "grid_composition": {
+                        "coal_pct": 50 - renewable_energy/2, "gas_pct": 30, "oil_pct": 5,
+                        "nuclear_pct": 10, "hydro_pct": renewable_energy*0.3,
+                        "wind_pct": renewable_energy*0.4, "solar_pct": renewable_energy*0.3, "other_pct": 5
+                    },
+                    "transport": {"mode": "truck", "distance_km": transport_distance, "weight_t": mass_kg/1000, "emission_factor_kg_co2e_per_tkm": 0.062},
+                    "material_emission_factors": {"virgin_kg_co2e_per_kg": 11.5, "secondary_kg_co2e_per_kg": 0.64},
+                    "recycling": {"collection_rate_pct": 75, "recycling_efficiency_pct": 90, "secondary_content_existing_pct": recycled_content}
+                }],
+                "analysis_type": analysis_type,
                 "study_type": study_type,
                 "report_type": "technical",
-                "format_type": report_format
+                "format_type": "json"
             }
             
-            # Execute LangGraph workflow
-            status_text.text("Executing LangGraph workflow...")
-            progress_bar.progress(25)
+            result = system.run_complete_analysis(input_data)
             
-            result = lca_system.run_complete_analysis(input_data)
+            # Store results in session state
+            st.session_state.analysis_results = result
+            st.session_state.analysis_history.append({
+                "timestamp": datetime.now(),
+                "type": "Quick Analysis",
+                "material": material_type,
+                "mass": mass_kg,
+                "result": result
+            })
             
-            if not result.get("success"):
-                st.error(f"❌ LangGraph workflow failed: {result.get('error')}")
-                if result.get("errors"):
-                    st.error(f"Errors: {result.get('errors')}")
-                st.stop()
-            
-            progress_bar.progress(100)
-            status_text.text("✅ Complete LangGraph workflow executed successfully!")
+            status_text.text("✅ Analysis completed successfully!")
+            progress_bar.progress(1.0)
             
             # Display results
-            with results_container:
-                st.success("🎉 Complete LCA Analysis with LangGraph Workflow Completed Successfully!")
-                
-                # Show workflow messages
-                workflow_messages = result.get("workflow_messages", [])
-                if workflow_messages:
-                    with st.expander("📝 Workflow Execution Log"):
-                        for msg in workflow_messages:
-                            st.write(f"• {msg.get('content', 'No content')}")
-                
-                # Key metrics
-                summary = result.get("summary", {})
-                lca_summary = summary.get("lca_summary", {})
-                compliance_summary = summary.get("compliance_summary", {})
-                report_summary = summary.get("report_summary", {})
-                
-                # Display key metrics
-                col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    st.metric(
-                        "Carbon Footprint", 
-                        f"{lca_summary.get('total_carbon_footprint_kg_co2_eq', 0):,.1f} kg CO₂-eq"
-                    )
-                
-                with col2:
-                    st.metric(
-                        "Compliance Grade", 
-                        compliance_summary.get('compliance_grade', 'N/A')
-                    )
-                
-                with col3:
-                    st.metric(
-                        "Sustainability Score", 
-                        f"{lca_summary.get('sustainability_score', 0):.1f}/100"
-                    )
-                
-                with col4:
-                    st.metric(
-                        "Reports Generated", 
-                        report_summary.get('formats_generated', 0)
-                    )
-                
-                # Detailed results
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.subheader("🏭 LCA Results")
-                    st.write(f"**Carbon Intensity:** {lca_summary.get('carbon_intensity_per_kg', 0):.2f} kg CO₂-eq/kg")
-                    st.write(f"**Circularity Index:** {lca_summary.get('circularity_index', 0):.3f}")
-                
-                with col2:
-                    st.subheader("📋 Compliance Status")
-                    st.write(f"**Status:** {compliance_summary.get('status', 'Unknown')}")
-                    st.write(f"**Score:** {compliance_summary.get('compliance_score', 0):.1%}")
-                
-                # Generated files
-                report_files = report_summary.get('report_files', [])
-                if report_files:
-                    st.subheader("📁 Generated Reports")
-                    for file_path in report_files:
-                        if file_path:
-                            file_name = Path(file_path).name
-                            if Path(file_path).exists():
-                                st.write(f"• ✅ {file_name}")
-                            else:
-                                st.write(f"• ⚠️ {file_name} (path: {file_path})")
-                
-                # Workflow details
-                with st.expander("🔄 LangGraph Workflow Details"):
-                    workflow_details = {
-                        "Analysis ID": result.get("analysis_id"),
-                        "Workflow Status": "Completed Successfully",
-                        "Nodes Executed": ["Data Ingestion", "LCA Analysis", "Compliance Check", "Report Generation"],
-                        "Total Execution Time": "N/A",
-                        "Input Parameters": input_data
-                    }
-                    st.json(workflow_details)
-                
-                # Full results (expandable)
-                with st.expander("📊 Complete Analysis Results"):
-                    st.json(result)
+            if result.get("success"):
+                display_analysis_results(result)
+            else:
+                st.error(f"❌ Analysis failed: {result.get('error', 'Unknown error')}")
                 
         except Exception as e:
-            st.error(f"❌ Error in complete LangGraph workflow: {str(e)}")
-            import traceback
-            st.code(traceback.format_exc())
-            progress_bar.progress(0)
-            status_text.text("❌ Workflow failed")
+            st.error(f"❌ Error during analysis: {e}")
 
-# Footer
-st.markdown("---")
-st.markdown(
-    """
-    💡 **Tips:** 
-    - Make sure your environment variables (CEREBRAS_API_KEY, PINECONE_API_KEY) are set correctly
-    - Check the 'Agent Status Check' if you encounter issues
-    - Use 'Individual Agents' to test each component separately
-    - Try 'File Upload Test' to test with your own data
-    - Use 'Complete LangGraph Workflow' to test the full system integration
-    """
-)
-
-# Add some debug info in sidebar
-with st.sidebar:
-    st.markdown("---")
-    st.subheader("🐛 Debug Info")
-    st.write(f"**Python Path:** {sys.path[0]}")
-    st.write(f"**Current Dir:** {current_dir}")
-    st.write(f"**Agents Available:** {agents_available}")
+def run_file_analysis_workflow(uploaded_file, analysis_type, study_type, report_format):
+    """Run file-based analysis workflow"""
     
-    if st.button("🔄 Refresh Page"):
-        st.experimental_rerun()
+    with st.spinner("🔄 Processing file and running analysis..."):
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        try:
+            # Save uploaded file temporarily
+            temp_file_path = f"./temp_{uploaded_file.name}"
+            with open(temp_file_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+            
+            status_text.text("📁 File uploaded successfully")
+            progress_bar.progress(0.2)
+            
+            # Determine file type
+            file_type = "excel" if uploaded_file.name.endswith(('.xlsx', '.xls')) else "csv"
+            
+            status_text.text("🔄 Running LCA analysis workflow...")
+            progress_bar.progress(0.4)
+            
+            # Run analysis
+            result = run_file_analysis(temp_file_path, file_type)
+            
+            progress_bar.progress(0.8)
+            
+            # Clean up temp file
+            if os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
+            
+            # Store results
+            st.session_state.analysis_results = result
+            st.session_state.analysis_history.append({
+                "timestamp": datetime.now(),
+                "type": "File Analysis",
+                "filename": uploaded_file.name,
+                "result": result
+            })
+            
+            status_text.text("✅ File analysis completed!")
+            progress_bar.progress(1.0)
+            
+            # Display results
+            if result.get("success"):
+                display_analysis_results(result)
+            else:
+                st.error(f"❌ Analysis failed: {result.get('error', 'Unknown error')}")
+                
+        except Exception as e:
+            st.error(f"❌ Error during file analysis: {e}")
+            if os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
+
+def run_advanced_analysis(input_data):
+    """Run advanced analysis with comprehensive parameters"""
+    
+    with st.spinner("🔄 Running comprehensive LCA analysis..."):
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        try:
+            system = LCASystem()
+            
+            status_text.text("🔄 Executing agentic workflow...")
+            progress_bar.progress(0.3)
+            
+            result = system.run_complete_analysis(input_data)
+            
+            progress_bar.progress(0.8)
+            
+            # Store results
+            st.session_state.analysis_results = result
+            st.session_state.analysis_history.append({
+                "timestamp": datetime.now(),
+                "type": "Advanced Analysis",
+                "material": input_data["scenarios"][0]["material_type"],
+                "result": result
+            })
+            
+            status_text.text("✅ Advanced analysis completed!")
+            progress_bar.progress(1.0)
+            
+            # Display results
+            if result.get("success"):
+                display_analysis_results(result)
+            else:
+                st.error(f"❌ Analysis failed: {result.get('error', 'Unknown error')}")
+                
+        except Exception as e:
+            st.error(f"❌ Error during advanced analysis: {e}")
+
+def display_analysis_results(result):
+    """Display comprehensive analysis results"""
+    
+    st.success("✅ Analysis completed successfully!")
+    
+    # Extract key metrics
+    summary = result.get("summary", {})
+    lca_summary = summary.get("lca_summary", {})
+    compliance_summary = summary.get("compliance_summary", {})
+    
+    # Key Metrics Cards
+    st.subheader("📊 Key Results")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric(
+            "Carbon Footprint",
+            f"{lca_summary.get('total_carbon_footprint_kg_co2_eq', 0):.1f}",
+            help="Total kg CO₂-equivalent emissions"
+        )
+    
+    with col2:
+        st.metric(
+            "Carbon Intensity",
+            f"{lca_summary.get('carbon_intensity_per_kg', 0):.2f}",
+            help="kg CO₂-eq per kg of material"
+        )
+    
+    with col3:
+        st.metric(
+            "Circularity Index",
+            f"{lca_summary.get('circularity_index', 0):.3f}",
+            help="Circular economy performance (0-1)"
+        )
+    
+    with col4:
+        st.metric(
+            "Compliance Grade",
+            compliance_summary.get('compliance_grade', 'N/A'),
+            help="ISO 14040/14044 compliance grade"
+        )
+    
+    # Detailed Results Tabs
+    tab1, tab2, tab3, tab4 = st.tabs(["📈 LCA Results", "✅ Compliance", "📋 Workflow", "📁 Files"])
+    
+    with tab1:
+        display_lca_results_tab(result)
+    
+    with tab2:
+        display_compliance_tab(result)
+    
+    with tab3:
+        display_workflow_tab(result)
+    
+    with tab4:
+        display_files_tab(result)
+
+def display_lca_results_tab(result):
+    """Display LCA results with visualizations"""
+    
+    detailed_results = result.get("detailed_results", {})
+    lca_results = detailed_results.get("lca", {}).get("lca_results", {})
+    
+    # Emissions breakdown
+    emissions_breakdown = lca_results.get("emissions_breakdown", {})
+    if emissions_breakdown:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("Emissions Breakdown")
+            # Create pie chart
+            labels = []
+            values = []
+            for key, value in emissions_breakdown.items():
+                if key != "total_kg_co2e" and value > 0:
+                    labels.append(key.replace("_kg_co2e", "").replace("_", " ").title())
+                    values.append(value)
+            
+            if values:
+                fig_pie = px.pie(values=values, names=labels, title="Emissions by Category")
+                st.plotly_chart(fig_pie, use_container_width=True)
+        
+        with col2:
+            st.subheader("Emissions Data")
+            emissions_df = pd.DataFrame([
+                {"Category": k.replace("_kg_co2e", "").replace("_", " ").title(), 
+                 "Emissions (kg CO₂-eq)": v} 
+                for k, v in emissions_breakdown.items() if v > 0
+            ])
+            st.dataframe(emissions_df, use_container_width=True)
+
+def display_compliance_tab(result):
+    """Display compliance results"""
+    
+    detailed_results = result.get("detailed_results", {})
+    compliance_results = detailed_results.get("compliance", {})
+    
+    if compliance_results.get("success"):
+        overall_score = compliance_results.get("overall_compliance_score", {})
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("Overall Compliance")
+            st.metric("Score", f"{overall_score.get('overall_score', 0):.1%}")
+            st.metric("Grade", overall_score.get('grade', 'N/A'))
+            st.info(f"Status: {overall_score.get('status', 'Unknown')}")
+        
+        with col2:
+            st.subheader("Category Scores")
+            categories = compliance_results.get("compliance_categories", {})
+            for category, details in categories.items():
+                if isinstance(details, dict):
+                    score = details.get('score', 0)
+                    st.write(f"**{category.replace('_', ' ').title()}:** {score:.1%}")
+    else:
+        st.warning("Compliance check not completed successfully")
+
+def display_workflow_tab(result):
+    """Display workflow execution details"""
+    
+    st.subheader("🔄 Workflow Execution")
+    
+    # Workflow messages
+    messages = result.get("workflow_messages", [])
+    for i, message in enumerate(messages):
+        if isinstance(message, dict):
+            content = message.get("content", "")
+            st.markdown(f"""
+            <div class="workflow-step">
+                <strong>Step {i+1}:</strong> {content}
+            </div>
+            """, unsafe_allow_html=True)
+    
+    # Analysis metadata
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Analysis Info")
+        st.write(f"**Analysis ID:** {result.get('analysis_id', 'N/A')}")
+        st.write(f"**Status:** {result.get('workflow_status', 'N/A')}")
+        st.write(f"**Timestamp:** {result.get('workflow_timestamp', 'N/A')}")
+    
+    with col2:
+        st.subheader("Performance")
+        if messages:
+            st.write(f"**Workflow Steps:** {len(messages)}")
+            st.write(f"**Success Rate:** {'100%' if result.get('success') else 'Failed'}")
+
+def display_files_tab(result):
+    """Display generated files and reports"""
+    
+    detailed_results = result.get("detailed_results", {})
+    report_results = detailed_results.get("reporting", {})
+    
+    if report_results.get("success"):
+        st.subheader("📁 Generated Reports")
+        
+        output_files = report_results.get("output_files", {})
+        for format_type, file_path in output_files.items():
+            st.write(f"**{format_type.upper()} Report:** `{file_path}`")
+        
+        charts_created = report_results.get("visualizations_created", 0)
+        st.write(f"**Charts Generated:** {charts_created}")
+        
+        # Show sample data if available
+        summary = result.get("summary", {})
+        if summary:
+            st.subheader("📊 Summary Data")
+            st.json(summary)
+    else:
+        st.warning("Report generation not completed successfully")
+
+def results_dashboard_tab():
+    """Display results dashboard with history"""
+    
+    st.header("📋 Results Dashboard")
+    
+    if not st.session_state.analysis_history:
+        st.info("No analysis history available. Run an analysis first!")
+        return
+    
+    # Analysis history
+    st.subheader("📈 Analysis History")
+    
+    history_data = []
+    for analysis in st.session_state.analysis_history:
+        result = analysis["result"]
+        summary = result.get("summary", {}) if result.get("success") else {}
+        lca_summary = summary.get("lca_summary", {})
+        
+        history_data.append({
+            "Timestamp": analysis["timestamp"].strftime("%Y-%m-%d %H:%M"),
+            "Type": analysis["type"],
+            "Material": analysis.get("material", analysis.get("filename", "N/A")),
+            "Carbon Footprint (kg CO₂-eq)": lca_summary.get("total_carbon_footprint_kg_co2_eq", 0),
+            "Status": "✅ Success" if result.get("success") else "❌ Failed"
+        })
+    
+    history_df = pd.DataFrame(history_data)
+    st.dataframe(history_df, use_container_width=True)
+    
+    # Current results
+    if st.session_state.analysis_results:
+        st.subheader("📊 Latest Analysis Results")
+        display_analysis_results(st.session_state.analysis_results)
+
+if __name__ == "__main__":
+    main()

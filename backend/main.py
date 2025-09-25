@@ -9,6 +9,7 @@ import json
 from datetime import datetime
 from typing import Dict, Any, Optional, TypedDict, Annotated
 from pathlib import Path
+import uuid
 
 # LangGraph imports
 from langgraph.graph import StateGraph, END
@@ -34,32 +35,28 @@ class LCAWorkflowState(TypedDict):
     compliance_results: Dict[str, Any]
     report_results: Dict[str, Any]
     workflow_status: str
+    analysis_id: str
     errors: list
-    current_step: str
 
 class LCASystem:
-    """Main LCA Analysis System orchestrating all agents with LangGraph"""
+    """Main LCA System with LangGraph workflow orchestration"""
     
     def __init__(self):
         # Initialize all agents
-        self.data_ingestion_agent = DataIngestionAgent()
+        self.data_agent = DataIngestionAgent()
         self.lca_agent = LCAAgent()
         self.compliance_agent = ComplianceAgent()
         self.reporting_agent = ReportingAgent()
         
-        # Create results directory
-        self.results_dir = Path("./results")
-        self.results_dir.mkdir(exist_ok=True)
-        
-        # Create the LangGraph workflow
-        self.workflow = self._create_graph()
-        
-    def _create_graph(self) -> StateGraph:
-        """Create the LangGraph workflow for LCA analysis"""
-        
+        # Build LangGraph workflow
+        self.workflow = self._build_workflow()
+        self.app = self.workflow.compile()
+    
+    def _build_workflow(self) -> StateGraph:
+        """Build LangGraph workflow"""
         workflow = StateGraph(LCAWorkflowState)
-
-        # Add all agents
+        
+        # Add workflow nodes
         workflow.add_node("data_ingestion", self._data_ingestion_node)
         workflow.add_node("lca_analysis", self._lca_analysis_node)
         workflow.add_node("compliance_check", self._compliance_check_node)
@@ -71,318 +68,333 @@ class LCASystem:
         workflow.add_edge("lca_analysis", "compliance_check")
         workflow.add_edge("compliance_check", "report_generation")
         workflow.add_edge("report_generation", END)
-
-        return workflow.compile()
+        
+        return workflow
     
     def _data_ingestion_node(self, state: LCAWorkflowState) -> LCAWorkflowState:
-        """Node for data ingestion and preprocessing"""
-        logger.info("Executing data ingestion node...")
-        
+        """Data ingestion workflow node"""
         try:
+            logger.info("Executing data ingestion node")
+            
             input_data = state["input_data"]
             
-            # Handle different input types
+            # Handle file-based input
             if "file_path" in input_data:
-                # File-based input
-                ingested_data = self.data_ingestion_agent.ingest_data(
+                result = self.data_agent.ingest_data(
                     file_path=input_data["file_path"],
-                    file_type=input_data.get("file_type", "excel")
+                    file_type=input_data.get("file_type", "csv")
                 )
             else:
-                # Direct parameter input
-                ingested_data = {
+                # Handle direct scenario data
+                scenarios = input_data.get("scenarios", [input_data])
+                result = {
                     "success": True,
                     "processed_data": {
-                        "metal_type": input_data.get("metal_type", "steel"),
-                        "production_kg": input_data.get("production_kg", 1000),
-                        "recycled_fraction": input_data.get("recycled_fraction", 0.3),
-                        "region": input_data.get("region", "US_average")
+                        "scenarios": scenarios,
+                        "total_scenarios": len(scenarios)
                     },
-                    "data_quality": {"completeness": 1.0, "accuracy": 1.0}
+                    "records_count": len(scenarios)
                 }
             
-            state["ingested_data"] = ingested_data
-            state["current_step"] = "data_ingestion_complete"
-            state["messages"].append({"role": "system", "content": "Data ingestion completed successfully"})
-            
-            if not ingested_data.get("success"):
-                state["errors"].append("Data ingestion failed")
+            if not result.get("success"):
+                state["errors"].append(f"Data ingestion failed: {result.get('error')}")
                 state["workflow_status"] = "failed"
+                return state
+            
+            state["ingested_data"] = result
+            state["messages"].append({"role": "system", "content": f"Data ingestion completed: {result.get('records_count', 0)} records processed"})
             
         except Exception as e:
-            logger.error(f"Error in data ingestion node: {e}")
+            logger.error(f"Data ingestion node error: {e}")
             state["errors"].append(f"Data ingestion error: {str(e)}")
             state["workflow_status"] = "failed"
         
         return state
     
     def _lca_analysis_node(self, state: LCAWorkflowState) -> LCAWorkflowState:
-        """Node for LCA calculations and analysis"""
-        logger.info("Executing LCA analysis node...")
-        
+        """LCA analysis workflow node"""
         try:
-            ingested_data = state["ingested_data"]
-            processed_data = ingested_data.get("processed_data", {})
+            logger.info("Executing LCA analysis node")
             
-            # Run LCA analysis using the correct method name
-            lca_results = self.lca_agent.perform_lca_analysis(
-                metal_type=processed_data.get("metal_type", "steel"),
-                production_kg=processed_data.get("production_kg", 1000),
-                recycled_fraction=processed_data.get("recycled_fraction", 0.3),
-                region=processed_data.get("region", "US_average")
+            if state["workflow_status"] == "failed":
+                return state
+            
+            # Get processed data
+            processed_data = state["ingested_data"].get("processed_data", {})
+            analysis_type = state["input_data"].get("analysis_type", "cradle_to_gate")
+            
+            # Perform LCA analysis
+            result = self.lca_agent.perform_lca_analysis(
+                production_data=processed_data,
+                analysis_type=analysis_type
             )
             
-            state["lca_results"] = lca_results
-            state["current_step"] = "lca_analysis_complete"
-            state["messages"].append({"role": "system", "content": "LCA analysis completed successfully"})
-            
-            if not lca_results.get("success"):
-                state["errors"].append("LCA analysis failed")
+            if not result.get("success"):
+                state["errors"].append(f"LCA analysis failed: {result.get('error')}")
                 state["workflow_status"] = "failed"
+                return state
+            
+            state["lca_results"] = result
+            
+            # Extract key metrics for message
+            lca_data = result.get("lca_results", {})
+            gwp_impact = lca_data.get("gwp_impact", {})
+            total_emissions = gwp_impact.get("total_kg_co2_eq", 0)
+            
+            state["messages"].append({
+                "role": "system", 
+                "content": f"LCA analysis completed: {total_emissions:.1f} kg CO2-eq total emissions"
+            })
             
         except Exception as e:
-            logger.error(f"Error in LCA analysis node: {e}")
+            logger.error(f"LCA analysis node error: {e}")
             state["errors"].append(f"LCA analysis error: {str(e)}")
             state["workflow_status"] = "failed"
         
         return state
     
     def _compliance_check_node(self, state: LCAWorkflowState) -> LCAWorkflowState:
-        """Node for ISO compliance checking"""
-        logger.info("Executing compliance check node...")
-        
+        """Compliance check workflow node"""
         try:
-            lca_results = state["lca_results"]
-            input_data = state["input_data"]
+            logger.info("Executing compliance check node")
             
-            # Run compliance check
-            compliance_results = self.compliance_agent.check_lca_compliance(
+            if state["workflow_status"] == "failed":
+                return state
+            
+            # Get LCA results and study type
+            lca_results = state["lca_results"]
+            study_type = state["input_data"].get("study_type", "internal_decision_support")
+            
+            # Perform compliance check
+            result = self.compliance_agent.check_lca_compliance(
                 lca_study_data=lca_results,
-                study_type=input_data.get("study_type", "internal_decision_support")
+                study_type=study_type
             )
             
-            state["compliance_results"] = compliance_results
-            state["current_step"] = "compliance_check_complete"
-            state["messages"].append({"role": "system", "content": "Compliance check completed successfully"})
-            
-            if not compliance_results.get("success"):
-                state["errors"].append("Compliance check failed")
+            if not result.get("success"):
+                state["errors"].append(f"Compliance check failed: {result.get('error')}")
                 state["workflow_status"] = "failed"
+                return state
+            
+            state["compliance_results"] = result
+            
+            # Extract compliance score for message
+            overall_score = result.get("overall_compliance_score", {})
+            grade = overall_score.get("grade", "N/A")
+            score = overall_score.get("overall_score", 0)
+            
+            state["messages"].append({
+                "role": "system",
+                "content": f"Compliance check completed: Grade {grade} ({score:.1%} compliance)"
+            })
             
         except Exception as e:
-            logger.error(f"Error in compliance check node: {e}")
+            logger.error(f"Compliance check node error: {e}")
             state["errors"].append(f"Compliance check error: {str(e)}")
             state["workflow_status"] = "failed"
         
         return state
     
     def _report_generation_node(self, state: LCAWorkflowState) -> LCAWorkflowState:
-        """Node for report generation with visualizations"""
-        logger.info("Executing report generation node...")
-        
+        """Report generation workflow node"""
         try:
+            logger.info("Executing report generation node")
+            
+            if state["workflow_status"] == "failed":
+                return state
+            
+            # Get results and report parameters
             lca_results = state["lca_results"]
             compliance_results = state["compliance_results"]
-            input_data = state["input_data"]
+            report_type = state["input_data"].get("report_type", "technical")
+            format_type = state["input_data"].get("format_type", "pdf")
             
-            # Generate comprehensive report
-            report_results = self.reporting_agent.generate_report(
+            # Generate report
+            result = self.reporting_agent.generate_report(
                 lca_results=lca_results,
                 compliance_results=compliance_results,
-                report_type=input_data.get("report_type", "technical"),
-                format_type=input_data.get("format_type", "pdf")
+                report_type=report_type,
+                format_type=format_type
             )
             
-            state["report_results"] = report_results
-            state["current_step"] = "report_generation_complete"
-            state["workflow_status"] = "completed"
-            state["messages"].append({"role": "system", "content": "Report generation completed successfully"})
-            
-            if not report_results.get("success"):
-                state["errors"].append("Report generation failed")
+            if not result.get("success"):
+                state["errors"].append(f"Report generation failed: {result.get('error')}")
                 state["workflow_status"] = "failed"
+                return state
+            
+            state["report_results"] = result
+            state["workflow_status"] = "completed"
+            
+            # Extract report info for message
+            formats_generated = len(result.get("output_files", {}))
+            charts_created = result.get("visualizations_created", 0)
+            
+            state["messages"].append({
+                "role": "system",
+                "content": f"Report generation completed: {formats_generated} formats, {charts_created} visualizations"
+            })
             
         except Exception as e:
-            logger.error(f"Error in report generation node: {e}")
+            logger.error(f"Report generation node error: {e}")
             state["errors"].append(f"Report generation error: {str(e)}")
             state["workflow_status"] = "failed"
         
         return state
     
     def run_complete_analysis(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Run complete LCA analysis workflow using LangGraph"""
-        
+        """Run complete LCA analysis using LangGraph workflow"""
         try:
-            logger.info("Starting complete LCA analysis workflow with LangGraph")
+            logger.info("Starting complete LCA analysis workflow")
+            
+            # Generate unique analysis ID
+            analysis_id = str(uuid.uuid4())[:8]
             
             # Initialize workflow state
-            initial_state = LCAWorkflowState(
-                messages=[{"role": "system", "content": "Starting LCA analysis workflow"}],
-                input_data=input_data,
-                ingested_data={},
-                lca_results={},
-                compliance_results={},
-                report_results={},
-                workflow_status="running",
-                errors=[],
-                current_step="initializing"
-            )
+            initial_state = {
+                "messages": [],
+                "input_data": input_data,
+                "ingested_data": {},
+                "lca_results": {},
+                "compliance_results": {},
+                "report_results": {},
+                "workflow_status": "running",
+                "analysis_id": analysis_id,
+                "errors": []
+            }
             
-            # Execute the workflow
-            final_state = self.workflow.invoke(initial_state)
+            # Execute workflow
+            final_state = self.app.invoke(initial_state)
             
             # Check if workflow completed successfully
-            if final_state["workflow_status"] == "failed":
+            if final_state["workflow_status"] != "completed":
                 return {
                     "success": False,
+                    "error": "Workflow failed to complete",
                     "errors": final_state["errors"],
-                    "workflow_timestamp": datetime.now().isoformat()
+                    "analysis_id": analysis_id
                 }
             
-            # Compile final results
-            final_results = {
+            # Generate summary
+            summary = self._generate_summary(final_state)
+            
+            return {
                 "success": True,
-                "analysis_id": f"LCA_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-                "input_parameters": input_data,
-                "ingested_data": final_state["ingested_data"],
-                "lca_results": final_state["lca_results"],
-                "compliance_assessment": final_state["compliance_results"],
-                "report_generation": final_state["report_results"],
+                "analysis_id": analysis_id,
+                "workflow_status": final_state["workflow_status"],
                 "workflow_messages": final_state["messages"],
                 "workflow_timestamp": datetime.now().isoformat(),
-                "summary": self._generate_workflow_summary(
-                    final_state["lca_results"], 
-                    final_state["compliance_results"], 
-                    final_state["report_results"]
-                )
+                "summary": summary,
+                "detailed_results": {
+                    "ingestion": final_state["ingested_data"],
+                    "lca": final_state["lca_results"],
+                    "compliance": final_state["compliance_results"],
+                    "reporting": final_state["report_results"]
+                }
             }
-            
-            # Save results
-            self._save_results(final_results)
-            
-            logger.info("Complete LCA analysis workflow completed successfully")
-            return final_results
             
         except Exception as e:
-            logger.error(f"Error in complete analysis workflow: {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "workflow_timestamp": datetime.now().isoformat()
-            }
+            logger.error(f"Complete analysis error: {e}")
+            return {"error": str(e), "success": False}
     
-    def run_file_based_analysis(self, file_path: str, file_type: str = "excel") -> Dict[str, Any]:
-        """Run analysis from uploaded file"""
-        input_data = {
-            "file_path": file_path,
-            "file_type": file_type,
-            "study_type": "internal_decision_support",
-            "report_type": "technical",
-            "format_type": "all"  # Generate all formats including visualizations
-        }
-        
-        return self.run_complete_analysis(input_data)
-    
-    def _generate_workflow_summary(self, lca_results: Dict[str, Any], 
-                                 compliance_results: Dict[str, Any],
-                                 report_results: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate workflow summary"""
-        
-        # Extract key metrics
-        lca_data = lca_results.get("lca_results", {})
-        gwp_impact = lca_data.get("gwp_impact", {})
-        
-        return {
-            "lca_summary": {
+    def _generate_summary(self, state: LCAWorkflowState) -> Dict[str, Any]:
+        """Generate analysis summary"""
+        try:
+            # LCA summary
+            lca_results = state["lca_results"].get("lca_results", {})
+            gwp_impact = lca_results.get("gwp_impact", {})
+            circularity = lca_results.get("circularity_metrics", {})
+            sustainability = state["lca_results"].get("ai_insights", {}).get("sustainability_score", {})
+            
+            lca_summary = {
                 "total_carbon_footprint_kg_co2_eq": gwp_impact.get("total_kg_co2_eq", 0),
-                "carbon_intensity_per_kg": gwp_impact.get("kg_co2_eq_per_kg_metal", 0),
-                "sustainability_score": lca_results.get("ai_insights", {}).get("sustainability_score", {}).get("overall_score", 0),
-                "circularity_index": lca_data.get("circularity_metrics", {}).get("circularity_index", 0)
-            },
-            "compliance_summary": {
-                "compliance_grade": compliance_results.get("overall_compliance_score", {}).get("grade", "N/A"),
-                "compliance_score": compliance_results.get("overall_compliance_score", {}).get("overall_score", 0),
-                "status": compliance_results.get("overall_compliance_score", {}).get("status", "Unknown")
-            },
-            "report_summary": {
+                "carbon_intensity_per_kg": gwp_impact.get("kg_co2_eq_per_kg_material", 0),
+                "circularity_index": circularity.get("circularity_index", circularity.get("weighted_circularity_index", 0)),
+                "sustainability_score": sustainability.get("overall_score", 0)
+            }
+            
+            # Compliance summary
+            compliance_results = state["compliance_results"]
+            overall_compliance = compliance_results.get("overall_compliance_score", {})
+            
+            compliance_summary = {
+                "compliance_score": overall_compliance.get("overall_score", 0),
+                "compliance_grade": overall_compliance.get("grade", "N/A"),
+                "status": overall_compliance.get("status", "Unknown")
+            }
+            
+            # Report summary
+            report_results = state["report_results"]
+            report_summary = {
                 "formats_generated": len(report_results.get("output_files", {})),
-                "visualizations_created": report_results.get("visualizations_created", 0),
+                "charts_created": report_results.get("visualizations_created", 0),
                 "report_files": list(report_results.get("output_files", {}).values())
             }
-        }
-    
-    def _save_results(self, results: Dict[str, Any]):
-        """Save analysis results"""
-        try:
-            analysis_id = results.get("analysis_id")
-            results_file = self.results_dir / f"{analysis_id}_complete_results.json"
             
-            with open(results_file, 'w') as f:
-                json.dump(results, f, indent=2, default=str)
-            
-            logger.info(f"Results saved to: {results_file}")
+            return {
+                "lca_summary": lca_summary,
+                "compliance_summary": compliance_summary,
+                "report_summary": report_summary
+            }
             
         except Exception as e:
-            logger.error(f"Error saving results: {e}")
+            logger.error(f"Summary generation error: {e}")
+            return {"error": str(e)}
 
-# Convenience functions
-def run_quick_lca_analysis(metal_type: str, production_kg: float, 
-                          recycled_fraction: float = 0.3) -> Dict[str, Any]:
-    """Run quick LCA analysis with default settings"""
+# Convenience functions for direct usage
+def run_quick_lca_analysis(material_type: str, mass_kg: float, 
+                          recycled_content_pct: float = 30) -> Dict[str, Any]:
+    """Quick LCA analysis with default parameters"""
     system = LCASystem()
     
+    # Create simplified input data
     input_data = {
-        "metal_type": metal_type,
-        "production_kg": production_kg,
-        "recycled_fraction": recycled_fraction,
-        "region": "US_average",
+        "scenarios": [{
+            "material_type": material_type.lower(),
+            "mass_kg": mass_kg,
+            "energy_intensity": {"virgin_process_kwh_per_kg": 15.0, "recycled_process_kwh_per_kg": 3.0},
+            "direct_emissions": {"virgin_kg_co2e_per_kg": 2.0, "recycled_kg_co2e_per_kg": 0.5},
+            "grid_composition": {"coal_pct": 30, "gas_pct": 40, "oil_pct": 5, "nuclear_pct": 10, 
+                               "hydro_pct": 5, "wind_pct": 5, "solar_pct": 3, "other_pct": 2},
+            "transport": {"mode": "truck", "distance_km": 100, "weight_t": mass_kg/1000, 
+                         "emission_factor_kg_co2e_per_tkm": 0.062},
+            "material_emission_factors": {"virgin_kg_co2e_per_kg": 11.5, "secondary_kg_co2e_per_kg": 0.64},
+            "recycling": {"collection_rate_pct": 75, "recycling_efficiency_pct": 90, 
+                         "secondary_content_existing_pct": recycled_content_pct}
+        }],
+        "analysis_type": "cradle_to_gate",
         "study_type": "internal_decision_support",
         "report_type": "technical",
-        "format_type": "pdf"
+        "format_type": "json"
     }
     
     return system.run_complete_analysis(input_data)
 
-def run_compliance_focused_analysis(metal_type: str, production_kg: float,
-                                   study_type: str = "comparative_assertion") -> Dict[str, Any]:
-    """Run analysis focused on compliance requirements"""
+def run_file_analysis(file_path: str, file_type: str = "csv") -> Dict[str, Any]:
+    """File-based LCA analysis"""
     system = LCASystem()
     
     input_data = {
-        "metal_type": metal_type,
-        "production_kg": production_kg,
-        "recycled_fraction": 0.25,
-        "region": "US_average",
-        "study_type": study_type,
-        "report_type": "regulatory_submission",
+        "file_path": file_path,
+        "file_type": file_type,
+        "analysis_type": "cradle_to_gate",
+        "study_type": "internal_decision_support",
+        "report_type": "technical",
         "format_type": "all"
     }
     
     return system.run_complete_analysis(input_data)
 
-def run_file_analysis(file_path: str, file_type: str = "excel") -> Dict[str, Any]:
-    """Run analysis from uploaded file"""
-    system = LCASystem()
-    return system.run_file_based_analysis(file_path, file_type)
-
 if __name__ == "__main__":
-    # Example usage
-    print("LCA Analysis System with LangGraph Workflow")
-    print("=" * 50)
+    # Test the system
+    print("Testing LCA System...")
     
-    # Quick test run
-    test_results = run_quick_lca_analysis(
-        metal_type="aluminum",
-        production_kg=1000,
-        recycled_fraction=0.4
-    )
+    result = run_quick_lca_analysis("aluminum", 1000.0, 30.0)
     
-    if test_results.get("success"):
-        print("✅ Analysis completed successfully!")
-        summary = test_results["summary"]
-        print(f"🌍 Carbon Footprint: {summary['lca_summary']['total_carbon_footprint_kg_co2_eq']:.1f} kg CO2-eq")
-        print(f"📊 Compliance Grade: {summary['compliance_summary']['compliance_grade']}")
-        print(f"🔄 Circularity Index: {summary['lca_summary']['circularity_index']:.2f}")
-        print(f"📄 Reports Generated: {summary['report_summary']['formats_generated']}")
+    if result.get("success"):
+        print(f"✅ Analysis completed successfully!")
+        print(f"Analysis ID: {result['analysis_id']}")
+        summary = result.get("summary", {})
+        lca_summary = summary.get("lca_summary", {})
+        print(f"Carbon Footprint: {lca_summary.get('total_carbon_footprint_kg_co2_eq', 0):.1f} kg CO2-eq")
     else:
-        print("❌ Analysis failed:", test_results.get("error"))
+        print(f"❌ Analysis failed: {result.get('error')}")
