@@ -6,6 +6,13 @@ import Section from "@/components/Section";
 import Card from "@/components/Card";
 import Button from "@/components/Button";
 import Link from "next/link";
+import {
+  listProjects,
+  listDatasets,
+  listAnalyses,
+  updateProject,
+} from "@/lib/projects";
+import { useUser } from "@/context/UserContext";
 
 // Derive a simple progress state for each project based on stored keys
 function computeProgress(project) {
@@ -30,17 +37,75 @@ function computeProgress(project) {
 }
 
 export default function DashboardPage() {
-  const [projects, setProjects] = useState({});
-  const [user, setUser] = useState(null);
+  const { user } = useUser();
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    const userData = localStorage.getItem("dc_user");
-    if (userData) setUser(JSON.parse(userData));
-    const stored = JSON.parse(localStorage.getItem("dc_projects") || "{}");
-    setProjects(stored);
-  }, []);
+    let cancelled = false;
+    (async () => {
+      try {
+        if (!user?.uid) {
+          setLoading(false);
+          return;
+        }
+        const pj = await listProjects(user.uid);
+        if (cancelled) return;
+        // For each project gather dataset & analysis counts (lightweight sequential for now)
+        const enriched = [];
+        for (const p of pj) {
+          try {
+            const datasets = await listDatasets(p.id);
+            const analyses = await listAnalyses(p.id);
+            const hasReport = analyses.some(
+              (a) => a.result?.results?.report_summary?.report_files?.length
+            );
+            enriched.push({
+              ...p,
+              datasetCount: datasets.length,
+              analysisCount: analyses.length,
+              latestAnalysisId: analyses.length
+                ? analyses[analyses.length - 1].id
+                : null,
+              hasReport,
+            });
+            // Opportunistically persist hasDatasets/hasReport flags if not set
+            const needUpdate =
+              (!p.hasDatasets && datasets.length) ||
+              (!p.hasReport && hasReport);
+            if (needUpdate) {
+              updateProject(p.id, {
+                hasDatasets: !!datasets.length,
+                hasReport,
+                latestAnalysisId: analyses.length
+                  ? analyses[analyses.length - 1].id
+                  : null,
+              }).catch(() => {});
+            }
+          } catch (inner) {
+            console.warn("Project enrichment failed", p.id, inner);
+            enriched.push({
+              ...p,
+              datasetCount: 0,
+              analysisCount: 0,
+              hasReport: false,
+            });
+          }
+        }
+        setProjects(enriched);
+      } catch (e) {
+        setError(e.message || "Failed to load projects");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.uid]);
 
-  const projectEntries = Object.entries(projects);
+  const projectEntries = projects;
 
   return (
     <>
@@ -61,7 +126,12 @@ export default function DashboardPage() {
             <Button size="sm">+ Add Project</Button>
           </Link>
         </div>
-        {projectEntries.length === 0 && (
+        {loading && (
+          <Card className="p-8 text-center text-sm text-gray-500">
+            Loading projects…
+          </Card>
+        )}
+        {!loading && projectEntries.length === 0 && (
           <Card className="p-8 text-center space-y-4">
             <p className="text-gray-600 text-sm">You have no projects yet.</p>
             <Link href="/projects/new">
@@ -70,29 +140,44 @@ export default function DashboardPage() {
           </Card>
         )}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {projectEntries.map(([id, project]) => {
-            const { steps, status, completedCount } = computeProgress(project);
+          {projectEntries.map((project) => {
+            const id = project.id;
+            // Determine destination: results if report, analysis if analyses exist, upload otherwise
+            const destination =
+              project.hasReport && project.latestAnalysisId
+                ? `/projects/${id}/results?analysis=${project.latestAnalysisId}`
+                : project.analysisCount > 0 && project.latestAnalysisId
+                ? `/projects/${id}/analysis?analysis=${project.latestAnalysisId}`
+                : project.datasetCount > 0
+                ? `/projects/${id}/analysis?dataset=${
+                    project.firstDatasetId || ""
+                  }`
+                : `/projects/${id}/upload`;
+
+            const { steps, status, completedCount } = computeProgress({
+              sheetJSON: project.datasetCount
+                ? { sheets: Array(project.datasetCount).fill(0) }
+                : null,
+              mappedJSON: project.analysisCount ? {} : null,
+            });
             const pct = Math.round((completedCount / steps.length) * 100);
-            const datasetCount = project.sheetJSON?.datasets
-              ? Object.keys(project.sheetJSON.datasets).length
-              : project.sheetJSON?.sheets
-              ? Object.keys(project.sheetJSON.sheets).length
-              : 0;
+            const datasetCount = project.datasetCount || 0;
             return (
-              <Card key={id} className="p-5 flex flex-col">
+              <Card
+                key={id}
+                className="p-5 flex flex-col cursor-pointer hover:shadow-md transition"
+                onClick={() => (window.location.href = destination)}
+              >
                 <div className="flex items-start justify-between mb-4">
                   <div>
                     <h3 className="font-semibold text-gray-900">
-                      {project.name || "Untitled Project"}
+                      {project.name || project.title || "Untitled Project"}
                     </h3>
                     <p className="text-xs text-gray-500 mt-0.5">ID: {id}</p>
                   </div>
-                  <Link
-                    href={`/projects/${id}/upload`}
-                    className="text-xs text-brand-emerald font-medium hover:underline"
-                  >
+                  <span className="text-xs text-brand-emerald font-medium">
                     Open →
-                  </Link>
+                  </span>
                 </div>
                 <div className="mb-4">
                   <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -127,9 +212,14 @@ export default function DashboardPage() {
                   <span className="px-2 py-0.5 rounded-full bg-gray-100">
                     {datasetCount} dataset{datasetCount === 1 ? "" : "s"}
                   </span>
-                  {project.mappedJSON && (
+                  {project.analysisCount > 0 && (
                     <span className="px-2 py-0.5 rounded-full bg-brand-sky/40 text-brand-forest">
-                      Mapped
+                      Analyzed
+                    </span>
+                  )}
+                  {project.hasReport && (
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-300">
+                      Report
                     </span>
                   )}
                 </div>

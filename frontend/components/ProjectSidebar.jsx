@@ -4,7 +4,6 @@ import { usePathname, useParams } from "next/navigation";
 
 const steps = [
   { key: "upload", label: "Upload Datasets" },
-  { key: "missing-values", label: "Gap Mapping" },
   { key: "analysis", label: "Analysis" },
   { key: "results", label: "Results & Report" },
 ];

@@ -1,12 +1,16 @@
 import { cn } from "@/lib/utils";
 
 const buttonVariants = {
-  default: "bg-brand-emerald hover:bg-brand-forest text-white",
-  destructive: "bg-red-500 hover:bg-red-600 text-white",
-  outline: "border border-gray-300 bg-white hover:bg-gray-50 text-gray-700",
-  secondary: "bg-gray-100 hover:bg-gray-200 text-gray-900",
-  ghost: "hover:bg-gray-100 text-gray-700",
-  link: "text-brand-emerald underline-offset-4 hover:underline",
+  default:
+    "bg-brand-copper hover:bg-brand-aluminum text-white shadow-sm hover:shadow transition-colors", // Primary
+  destructive: "bg-red-600 hover:bg-red-700 text-white",
+  outline:
+    "border border-brand-steel/50 bg-white hover:bg-brand-aluminum/30 text-brand-charcoal",
+  secondary:
+    "bg-brand-green hover:bg-brand-steel text-white focus-visible:ring-brand-green/40",
+  ghost:
+    "hover:bg-brand-aluminum/30 text-brand-blue focus-visible:ring-brand-blue/30",
+  link: "text-brand-copper underline-offset-4 hover:underline",
 };
 
 const buttonSizes = {
@@ -27,7 +31,7 @@ export default function Button({
   return (
     <button
       className={cn(
-        "inline-flex items-center justify-center rounded-xl font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-emerald focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed",
+        "inline-flex items-center justify-center rounded-xl font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-brand-blue disabled:opacity-50 disabled:cursor-not-allowed",
         buttonVariants[variant],
         buttonSizes[size],
         className

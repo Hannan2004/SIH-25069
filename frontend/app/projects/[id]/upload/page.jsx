@@ -8,147 +8,272 @@ import Card from "@/components/Card";
 import Button from "@/components/Button";
 import UploadDropzone from "@/components/UploadDropzone";
 import EditableSheet from "@/components/EditableSheet";
+import {
+  getProject,
+  addDataset,
+  listDatasets,
+  updateProject,
+  addAnalysis,
+} from "@/lib/projects";
+import {
+  extractAnalysisPayload,
+  validatePayload,
+} from "@/lib/extractAnalysisPayload";
+import { useUser } from "@/context/UserContext";
 
 export default function UploadPage() {
   const params = useParams();
   const router = useRouter();
   const projectId = params.id;
+  const { user } = useUser();
   const [project, setProject] = useState(null);
-  // in-memory datasets: { [id]: { label, sheets?, activeSheet, fileMeta } }
-  // localStorage will only persist: projects[projectId].datasetIndex = { [id]: { label, fileMeta, activeSheet } }
-  const [datasets, setDatasets] = useState({});
-  const [activeDataset, setActiveDataset] = useState("");
+  // in-memory only: { tempId: { label, sheets, activeSheet, fileMeta } } OR persisted (id from Firestore with gcsUrl)
+  const [localDatasets, setLocalDatasets] = useState({});
+  const [remoteDatasets, setRemoteDatasets] = useState([]); // list from Firestore
+  const [activeDataset, setActiveDataset] = useState(null); // key: tempId or remote id
   const [activeSheet, setActiveSheet] = useState("");
   const [datasetType, setDatasetType] = useState("");
   const [statusMsg, setStatusMsg] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  // analysis states removed in new flow (persist + redirect)
+  const [analysisPayload, setAnalysisPayload] = useState(null);
+  // analysisPayload omitted (not needed for UI currently)
 
   useEffect(() => {
-    const projects = JSON.parse(localStorage.getItem("dc_projects") || "{}");
-    if (projects[projectId]) {
-      setProject(projects[projectId]);
-      const pj = projects[projectId];
-      // New model: datasetIndex (metadata only)
-      if (pj.datasetIndex) {
-        setDatasets(pj.datasetIndex); // note: sheets not stored; will load on demand
-        const first = Object.keys(pj.datasetIndex)[0];
-        if (first) {
-          setActiveDataset(first);
-          setActiveSheet(pj.datasetIndex[first].activeSheet || "");
-        }
-      } else if (pj.sheetJSON) {
-        // Migration path from older formats
-        if (pj.sheetJSON.datasets) {
-          const migrated = {};
-          Object.entries(pj.sheetJSON.datasets).forEach(([k, v]) => {
-            migrated[k] = {
-              label: v.label,
-              activeSheet: v.activeSheet,
-              fileMeta: v.fileMeta || null,
-              // omit sheets for storage
-            };
-          });
-          pj.datasetIndex = migrated;
-          delete pj.sheetJSON; // remove large payload
-          const projectsAll = JSON.parse(
-            localStorage.getItem("dc_projects") || "{}"
-          );
-          projectsAll[projectId] = pj;
-          localStorage.setItem("dc_projects", JSON.stringify(projectsAll));
-          setDatasets(migrated);
-          const first = Object.keys(migrated)[0];
-          if (first) {
-            setActiveDataset(first);
-            setActiveSheet(migrated[first].activeSheet || "");
-          }
-        } else if (pj.sheetJSON.sheets) {
-          // legacy single dataset
-          const migrated = {
-            default: {
-              label: "Primary Inventory",
-              activeSheet: pj.sheetJSON.active,
-              fileMeta: null,
-            },
-          };
-          pj.datasetIndex = migrated;
-          delete pj.sheetJSON;
-          const projectsAll = JSON.parse(
-            localStorage.getItem("dc_projects") || "{}"
-          );
-          projectsAll[projectId] = pj;
-          localStorage.setItem("dc_projects", JSON.stringify(projectsAll));
-          setDatasets(migrated);
-          setActiveDataset("default");
-          setActiveSheet(migrated.default.activeSheet || "");
-        }
-      }
-    }
+    (async () => {
+      const pj = await getProject(projectId);
+      if (pj) setProject(pj);
+      const rds = await listDatasets(projectId);
+      setRemoteDatasets(rds);
+    })();
   }, [projectId]);
 
   const handleUpload = useCallback(
     (data) => {
       if (!datasetType) return;
-      const base = datasetType.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-      const key = Object.keys(datasets).includes(base)
-        ? `${base}-${Date.now().toString().slice(-4)}`
-        : base;
-      const next = {
-        ...datasets,
-        [key]: {
+      const tempId = `temp-${Date.now()}`;
+      setLocalDatasets((prev) => ({
+        ...prev,
+        [tempId]: {
           label: datasetType,
           activeSheet: data.active,
-          fileMeta: data.fileMeta || null,
-          sheets: data.sheets, // keep in memory only
+          fileMeta: data.fileMeta,
+          sheets: data.sheets,
         },
-      };
-      setDatasets(next);
-      setActiveDataset(key);
+      }));
+      setActiveDataset(tempId);
       setActiveSheet(data.active);
       setDatasetType("");
-      setStatusMsg(`Added dataset: ${datasetType}`);
+      setStatusMsg(`Added dataset (not yet saved): ${datasetType}`);
       setTimeout(() => setStatusMsg(""), 2500);
     },
-    [datasetType, datasets]
+    [datasetType]
   );
 
-  const handleSave = () => {
-    if (!Object.keys(datasets).length) return;
-    const metaOnly = {};
-    Object.entries(datasets).forEach(([k, v]) => {
-      metaOnly[k] = {
-        label: v.label,
-        activeSheet: v.activeSheet,
-        fileMeta: v.fileMeta || null,
+  const saveActiveDataset = async () => {
+    if (!activeDataset || !localDatasets[activeDataset]) return;
+    setSaving(true);
+    try {
+      const ds = localDatasets[activeDataset];
+      // Choose the active sheet (or fallback first sheet) for key/value extraction
+      const sheetName = ds.activeSheet || Object.keys(ds.sheets)[0];
+      const rows = ds.sheets[sheetName];
+      const payload = extractAnalysisPayload(rows);
+      // Log payload for developer visibility
+      console.log("[Dataset Payload]", payload);
+
+      // Validate payload
+      const validation = validatePayload(payload);
+
+      // Sanitize sheets snapshot to remove nested arrays (Firestore disallows arrays of arrays)
+      // We convert each sheet's 2D array into an array of row objects keyed by header names when present.
+      const sanitizeRows = (rMatrix) => {
+        if (!Array.isArray(rMatrix)) return [];
+        if (!rMatrix.length) return [];
+        // If already array of objects just return (assume safe)
+        if (typeof rMatrix[0] === "object" && !Array.isArray(rMatrix[0]))
+          return rMatrix;
+        // Expect array-of-arrays
+        const headerCandidate = rMatrix[0];
+        const nonEmptyHeaderCount = Array.isArray(headerCandidate)
+          ? headerCandidate.filter(
+              (c) => c !== null && c !== undefined && c !== ""
+            ).length
+          : 0;
+        const looksLikeHeader = nonEmptyHeaderCount >= 2; // simple heuristic
+        let headers = [];
+        let dataRows = rMatrix;
+        if (looksLikeHeader) {
+          headers = headerCandidate.map((h, i) =>
+            h === null || h === undefined || h === "" ? `col_${i}` : String(h)
+          );
+          dataRows = rMatrix.slice(1);
+        } else {
+          // fabricate headers col_0..col_n
+          const maxLen = Math.max(
+            ...rMatrix.map((r) => (Array.isArray(r) ? r.length : 0))
+          );
+          headers = Array.from({ length: maxLen }, (_, i) => `col_${i}`);
+        }
+        return dataRows
+          .filter(
+            (row) =>
+              Array.isArray(row) &&
+              row.some((c) => c !== null && c !== undefined && c !== "")
+          )
+          .map((row) => {
+            const obj = {};
+            headers.forEach((h, idx) => {
+              obj[h] = row[idx] === undefined ? "" : row[idx];
+            });
+            return obj;
+          });
       };
-    });
-    const projects = JSON.parse(localStorage.getItem("dc_projects") || "{}");
-    if (!projects[projectId]) return;
-    projects[projectId].datasetIndex = metaOnly;
-    delete projects[projectId].sheetJSON; // ensure old large structure removed
-    localStorage.setItem("dc_projects", JSON.stringify(projects));
-    setStatusMsg("Dataset metadata saved.");
-    setTimeout(() => setStatusMsg(""), 3000);
+
+      const sanitizedSheets = Object.fromEntries(
+        Object.entries(ds.sheets).map(([name, rMatrix]) => [
+          name,
+          sanitizeRows(rMatrix),
+        ])
+      );
+
+      const datasetId = await addDataset(projectId, {
+        name: ds.label,
+        type: ds.label,
+        activeSheet: sheetName,
+        payload, // store the structured analysis payload directly
+        // Store sanitized snapshot (array of objects) to remain Firestore-compliant
+        sheetsSnapshot: sanitizedSheets,
+        validation,
+      });
+
+      // Remove temp + refresh list
+      setLocalDatasets((prev) => {
+        const cp = { ...prev };
+        delete cp[activeDataset];
+        return cp;
+      });
+      const rds = await listDatasets(projectId);
+      setRemoteDatasets(rds);
+      setActiveDataset(datasetId);
+      setStatusMsg(
+        validation.valid
+          ? "Dataset payload saved."
+          : `Dataset saved with warnings: ${validation.issues.join("; ")}`
+      );
+      setTimeout(() => setStatusMsg(""), 2500);
+      await updateProject(projectId, { hasDatasets: true });
+    } catch (e) {
+      console.error(e);
+      setStatusMsg(e.message || "Save failed");
+      setTimeout(() => setStatusMsg(""), 3000);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const fillEmpty = () => {
     if (!activeDataset) return;
-    const ds = datasets[activeDataset];
-    if (!ds.sheets) return; // nothing loaded in memory
+    // Only applies to unsaved local dataset currently in memory
+    if (!localDatasets[activeDataset]) return;
+    const ds = localDatasets[activeDataset];
     const newSheets = {};
     Object.entries(ds.sheets).forEach(([name, rows]) => {
       newSheets[name] = rows.map((r) =>
         r.map((c) => (c === "" || c == null ? "0" : c))
       );
     });
-    const updated = {
-      ...datasets,
+    setLocalDatasets((prev) => ({
+      ...prev,
       [activeDataset]: { ...ds, sheets: newSheets },
-    };
-    setDatasets(updated);
+    }));
   };
 
-  const proceed = () => {
-    handleSave();
-    router.push(`/projects/${projectId}/missing-values`);
+  const runAnalysis = async () => {
+    if (!activeDataset) return;
+    let payload = null;
+    if (localDatasets[activeDataset]) {
+      const ds = localDatasets[activeDataset];
+      const sheet = ds.activeSheet || Object.keys(ds.sheets)[0];
+      payload = extractAnalysisPayload(ds.sheets[sheet]);
+    } else {
+      const ds = remoteDatasets.find((d) => d.id === activeDataset);
+      if (!ds) return;
+      if (ds.payload) {
+        payload = ds.payload; // already stored
+      } else if (ds.sheetsSnapshot) {
+        const sheet = ds.activeSheet || Object.keys(ds.sheetsSnapshot)[0];
+        const sheetData = ds.sheetsSnapshot[sheet];
+        // If sheetData is array of objects we can send directly to extractor.
+        if (
+          Array.isArray(sheetData) &&
+          sheetData.length > 0 &&
+          typeof sheetData[0] === "object" &&
+          !Array.isArray(sheetData[0])
+        ) {
+          payload = extractAnalysisPayload(sheetData);
+        } else {
+          // Fallback (should not happen after sanitization)
+          payload = extractAnalysisPayload(sheetData);
+        }
+      } else {
+        setStatusMsg("No payload available for this dataset");
+        setTimeout(() => setStatusMsg(""), 2500);
+        return;
+      }
+    }
+    if (!payload) return;
+    setAnalyzing(true);
+    try {
+      setAnalysisPayload(payload);
+      const backendBase =
+        process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+      const started = performance.now();
+      // Attach project-level configuration overrides if present
+      const enrichedPayload = {
+        ...payload,
+        study_type:
+          project?.studyType ||
+          payload.study_type ||
+          "internal_decision_support",
+        analysis_type:
+          project?.analysisType || payload.analysis_type || "cradle_to_gate",
+        report_type: project?.reportType || payload.report_type || "technical",
+      };
+      const res = await fetch(`${backendBase}/analyze/comprehensive`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(enrichedPayload),
+      });
+      if (!res.ok) {
+        setStatusMsg("Analysis failed");
+        setTimeout(() => setStatusMsg(""), 2500);
+        return;
+      }
+      const result = await res.json();
+      const durationMs = Math.round(performance.now() - started);
+      // Persist analysis document then redirect
+      const analysisId = await addAnalysis(projectId, {
+        datasetId: activeDataset,
+        payload: enrichedPayload,
+        result,
+        status: "complete",
+        durationMs,
+        studyType: enrichedPayload.study_type,
+        analysisType: enrichedPayload.analysis_type,
+        reportType: enrichedPayload.report_type,
+      });
+      setStatusMsg("Analysis complete – redirecting…");
+      setTimeout(() => setStatusMsg(""), 2000);
+      router.push(`/projects/${projectId}/analysis?analysis=${analysisId}`);
+    } catch (e) {
+      console.error(e);
+      setStatusMsg("Analysis error");
+      setTimeout(() => setStatusMsg(""), 2500);
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
   return (
@@ -188,130 +313,174 @@ export default function UploadPage() {
                 <UploadDropzone onDataParsed={handleUpload} />
               </div>
             </div>
-            {Object.keys(datasets).length === 0 && (
+            {Object.keys(localDatasets).length === 0 &&
+            remoteDatasets.length === 0 ? (
               <p className="text-sm text-gray-500">No datasets added yet.</p>
-            )}
-            {Object.keys(datasets).length > 0 && (
+            ) : (
               <div className="space-y-6">
                 <div className="flex flex-wrap gap-3 items-center">
-                  {Object.entries(datasets).map(([key, ds]) => {
-                    const hasUrl = ds.fileMeta?.url;
-                    return (
-                      <button
-                        key={key}
-                        title={
-                          hasUrl ? `Source: ${ds.fileMeta.url}` : undefined
-                        }
-                        onClick={() => {
-                          setActiveDataset(key);
-                          setActiveSheet(ds.activeSheet);
-                        }}
-                        className={`px-4 py-2 rounded-full text-xs font-medium border relative transition group ${
-                          activeDataset === key
-                            ? "bg-brand-emerald text-white border-brand-emerald"
-                            : "bg-white hover:bg-gray-50"
-                        }`}
-                      >
-                        {ds.label}
-                        {hasUrl && (
-                          <span className="ml-1 text-[10px] underline decoration-dotted group-hover:text-brand-sky">
-                            link
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
+                  {remoteDatasets.map((ds) => (
+                    <button
+                      key={ds.id}
+                      title={
+                        ds.payload
+                          ? "Stored as payload"
+                          : ds.gcsUrl
+                          ? `Source: ${ds.gcsUrl}`
+                          : undefined
+                      }
+                      onClick={() => {
+                        setActiveDataset(ds.id);
+                        setActiveSheet(ds.activeSheet || "");
+                      }}
+                      className={`px-4 py-2 rounded-full text-xs font-medium border relative transition group ${
+                        activeDataset === ds.id
+                          ? "bg-brand-emerald text-white border-brand-emerald"
+                          : "bg-white hover:bg-gray-50"
+                      }`}
+                    >
+                      {ds.name || ds.type}
+                      {ds.payload && (
+                        <span className="ml-1 text-[10px] text-brand-emerald">
+                          ●
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                  {Object.entries(localDatasets).map(([key, ds]) => (
+                    <button
+                      key={key}
+                      title="Unsaved dataset"
+                      onClick={() => {
+                        setActiveDataset(key);
+                        setActiveSheet(ds.activeSheet);
+                      }}
+                      className={`px-4 py-2 rounded-full text-xs font-medium border relative transition group ${
+                        activeDataset === key
+                          ? "bg-brand-emerald text-white border-brand-emerald"
+                          : "bg-white hover:bg-gray-50"
+                      }`}
+                    >
+                      {ds.label}*
+                    </button>
+                  ))}
                   <div className="ml-auto flex gap-2">
                     <Button
                       variant="secondary"
                       size="sm"
                       onClick={fillEmpty}
-                      disabled={!activeDataset}
+                      disabled={!activeDataset || !localDatasets[activeDataset]}
                     >
                       Fill empty with 0
                     </Button>
-                    <Button variant="outline" size="sm" onClick={handleSave}>
-                      Save All
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={saveActiveDataset}
+                      disabled={!localDatasets[activeDataset] || saving}
+                    >
+                      {saving ? "Saving…" : "Save Dataset"}
                     </Button>
                     <Button
                       size="sm"
-                      onClick={proceed}
-                      disabled={!Object.keys(datasets).length}
+                      onClick={runAnalysis}
+                      disabled={!activeDataset || analyzing}
                     >
-                      Proceed →
+                      {analyzing ? "Analyzing…" : "Analyze"}
                     </Button>
                   </div>
                 </div>
-                {activeDataset && (
+                {activeDataset && localDatasets[activeDataset] && (
                   <div className="border rounded-lg p-4">
                     <div className="flex flex-wrap items-center gap-2 mb-3">
-                      {datasets[activeDataset].sheets &&
-                        Object.keys(datasets[activeDataset].sheets).map(
-                          (sheet) => (
-                            <button
-                              key={sheet}
-                              onClick={() => setActiveSheet(sheet)}
-                              className={`px-3 py-1.5 rounded-md text-xs font-medium border ${
-                                activeSheet === sheet
-                                  ? "bg-brand-emerald text-white border-brand-emerald"
-                                  : "bg-white hover:bg-gray-50"
-                              }`}
-                            >
-                              {sheet}
-                            </button>
-                          )
-                        )}
+                      {Object.keys(localDatasets[activeDataset].sheets).map(
+                        (sheet) => (
+                          <button
+                            key={sheet}
+                            onClick={() => setActiveSheet(sheet)}
+                            className={`px-3 py-1.5 rounded-md text-xs font-medium border ${
+                              activeSheet === sheet
+                                ? "bg-brand-emerald text-white border-brand-emerald"
+                                : "bg-white hover:bg-gray-50"
+                            }`}
+                          >
+                            {sheet}
+                          </button>
+                        )
+                      )}
                     </div>
-                    {datasets[activeDataset].sheets ? (
-                      <EditableSheet
-                        sheetName={activeSheet}
-                        data={datasets[activeDataset].sheets[activeSheet]}
-                        onChange={(rows) => {
-                          const updated = {
-                            ...datasets,
-                            [activeDataset]: {
-                              ...datasets[activeDataset],
-                              sheets: {
-                                ...datasets[activeDataset].sheets,
-                                [activeSheet]: rows,
-                              },
-                              activeSheet: activeSheet,
+                    <EditableSheet
+                      sheetName={activeSheet}
+                      data={localDatasets[activeDataset].sheets[activeSheet]}
+                      onChange={(rows) => {
+                        setLocalDatasets((prev) => ({
+                          ...prev,
+                          [activeDataset]: {
+                            ...prev[activeDataset],
+                            sheets: {
+                              ...prev[activeDataset].sheets,
+                              [activeSheet]: rows,
                             },
-                          };
-                          setDatasets(updated);
-                        }}
-                      />
-                    ) : (
-                      <p className="text-xs text-gray-500">
-                        Sheets not loaded. Re-upload file to edit locally.
-                      </p>
-                    )}
-                    {datasets[activeDataset].fileMeta?.url && (
-                      <p className="mt-3 text-[11px] text-gray-500 break-all">
-                        Source URL:{" "}
-                        <a
-                          className="text-brand-emerald hover:underline"
-                          href={datasets[activeDataset].fileMeta.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          {datasets[activeDataset].fileMeta.url}
-                        </a>
-                      </p>
-                    )}
+                            activeSheet,
+                          },
+                        }));
+                      }}
+                    />
                   </div>
+                )}
+                {activeDataset &&
+                  remoteDatasets.find((d) => d.id === activeDataset) && (
+                    <div className="border rounded-lg p-4 text-xs text-gray-500 space-y-2">
+                      <p className="font-medium">Stored Dataset</p>
+                      <pre className="bg-gray-50 p-2 rounded max-h-48 overflow-auto">
+                        {JSON.stringify(
+                          remoteDatasets.find((d) => d.id === activeDataset)
+                            ?.payload || {},
+                          null,
+                          2
+                        )}
+                      </pre>
+                      <p className="text-[10px] text-gray-400">
+                        (Original sheets snapshot preserved in Firestore)
+                      </p>
+                    </div>
+                  )}
+                {statusMsg && (
+                  <p className="text-xs text-brand-emerald">{statusMsg}</p>
                 )}
               </div>
             )}
-            {statusMsg && (
-              <p className="text-xs text-brand-emerald">{statusMsg}</p>
-            )}
           </Card>
+          {analyzing && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/70 backdrop-blur-sm">
+              <div className="bg-white border rounded-lg p-6 shadow-md flex flex-col items-center gap-3 w-[260px]">
+                <div className="animate-spin h-8 w-8 rounded-full border-4 border-brand-emerald border-t-transparent" />
+                <p className="text-sm text-gray-600 text-center">
+                  Running analysis…
+                </p>
+              </div>
+            </div>
+          )}
           <Card className="p-4 bg-brand-sky/40 border-brand-sky text-xs text-brand-forest">
             Tip: Add multiple datasets to represent different parts of your
             system (e.g., energy vs process vs logistics). They will be merged
             logically in later analysis steps.
           </Card>
+          {remoteDatasets.length > 0 && (
+            <div className="flex justify-end">
+              <Button
+                onClick={() => {
+                  // choose first saved dataset for now
+                  const first = remoteDatasets[0];
+                  router.push(
+                    `/projects/${projectId}/analysis?dataset=${first.id}`
+                  );
+                }}
+              >
+                Start Analysis →
+              </Button>
+            </div>
+          )}
         </div>
       </Section>
     </>

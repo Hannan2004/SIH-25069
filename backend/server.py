@@ -90,6 +90,8 @@ class LCAAnalysisRequest(BaseModel):
     recycling: RecyclingInput
     
     # Analysis configuration
+    study_type: str = Field("internal_decision_support", description="Type of study")
+    report_type: str = Field("technical", description="Type of report")
     analysis_type: str = Field("cradle_to_gate", description="Analysis scope")
     report_format: str = Field("json", description="Output format")
 
@@ -268,25 +270,56 @@ async def comprehensive_analysis(request: LCAAnalysisRequest):
         
         input_data = {
             "scenarios": [scenario_data],
-            "study_type": "internal_decision_support",
-            "report_type": "technical",
+            "study_type": request.study_type,
+            "report_type": request.report_type,
             "format_type": request.report_format,
             "analysis_type": request.analysis_type
         }
         
         results = lca_system.run_complete_analysis(input_data)
-        
+
         if not results.get("success"):
             raise HTTPException(status_code=400, detail=results.get("error", "Analysis failed"))
-        
-        # Return comprehensive results
+
+        # Work on a mutable copy of the summary to embed report JSON files
+        summary = results.get("summary", {}) or {}
+        report_summary = summary.get("report_summary", {}) or {}
+        report_files = report_summary.get("report_files", []) or []
+
+        embedded_reports = []
+        changed = False
+        for path in report_files:
+            if isinstance(path, str) and path.lower().endswith('.json') and os.path.exists(path):
+                try:
+                    with open(path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    # Tag original source path for traceability
+                    if isinstance(data, dict):
+                        data['_source_path'] = path
+                    embedded_reports.append(data)
+                    changed = True
+                except Exception as e:
+                    embedded_reports.append({
+                        'error': f'Failed to load report file: {e}',
+                        'path': path
+                    })
+                    changed = True
+            else:
+                # Keep original entry if not loadable
+                embedded_reports.append(path)
+
+        if changed:
+            # Replace the list with embedded JSON objects (or error descriptors)
+            report_summary['report_files'] = embedded_reports
+            summary['report_summary'] = report_summary
+
         return {
             "success": True,
             "analysis_id": results.get("analysis_id"),
-            "results": results.get("summary", {}),
+            "results": summary,
             "detailed_results": results.get("lca_results", {}),
             "compliance_check": results.get("compliance_summary", {}),
-            "recommendations": results.get("summary", {}).get("recommendations", []),
+            "recommendations": summary.get("recommendations", []),
             "charts_available": bool(results.get("chart_paths")),
             "timestamp": datetime.now().isoformat()
         }

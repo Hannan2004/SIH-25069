@@ -1,49 +1,71 @@
 import { NextResponse } from "next/server";
 import { Storage } from "@google-cloud/storage";
-import path from "path";
-import fs from "fs/promises";
 
-// Initialize Google Cloud Storage client
-const storage = new Storage({
-  keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
-});
+// Defensive: ensure this route isn't executed in edge runtime where native deps might break.
+export const runtime = 'nodejs';
 
-const bucketName = process.env.GCS_BUCKET_NAME;
+let storage; // lazy init to surface credential errors once
+function getStorage() {
+  if (!storage) {
+    const keyFile = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    if (!keyFile) throw new Error("GOOGLE_APPLICATION_CREDENTIALS not set");
+    storage = new Storage({ keyFilename: keyFile });
+  }
+  return storage;
+}
 
 export async function POST(req) {
+  const bucketName = process.env.GCS_BUCKET_NAME;
+  if (!bucketName) {
+    return NextResponse.json(
+      { error: "Server misconfiguration: GCS_BUCKET_NAME missing" },
+      { status: 500 }
+    );
+  }
   try {
-    // Parse incoming file
     const formData = await req.formData();
-    const file = formData.get("file"); // <input name="file" />
+    const file = formData.get("file");
     if (!file) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
     }
+    // Some environments provide file as a Blob without name/type fallback
+    const originalName = file.name || 'dataset.json';
+    const contentType = file.type || 'application/json';
 
-    // Convert file to buffer
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Create a unique file name
-    const fileName = `${Date.now()}-${file.name}`;
-    const bucket = storage.bucket(bucketName);
+    if (buffer.length === 0) {
+      return NextResponse.json({ error: "Empty file" }, { status: 400 });
+    }
+
+    const safeBase = originalName.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const fileName = `${Date.now()}-${safeBase}`;
+
+    const gcs = getStorage();
+    const bucket = gcs.bucket(bucketName);
     const blob = bucket.file(fileName);
 
-    // Upload file
     await blob.save(buffer, {
-      metadata: { contentType: file.type },
+      metadata: { contentType },
       resumable: false,
+      validation: 'crc32c'
     });
 
-    // Make file public (optional for testing)
-    await blob.makePublic();
+    // Optionally make public – consider restricting later
+    try {
+      await blob.makePublic();
+    } catch (e) {
+      console.warn("makePublic failed (non-fatal)", e.message);
+    }
 
-    // Public URL
-    const publicUrl = `https://storage.googleapis.com/${bucketName}/${fileName}`;
-    console.log("Uploaded file URL:", publicUrl);
-
-    return NextResponse.json({ success: true, url: publicUrl });
+    const publicUrl = `https://storage.googleapis.com/${bucketName}/${encodeURIComponent(fileName)}`;
+    return NextResponse.json({ success: true, url: publicUrl, name: fileName });
   } catch (error) {
     console.error("Upload error:", error);
-    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message || "Upload failed" },
+      { status: 500 }
+    );
   }
 }

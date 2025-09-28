@@ -1,64 +1,66 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { UserPlus, User, Building, Briefcase, Mail, Lock } from 'lucide-react'
-import PageHero from '@/components/PageHero'
-import Section from '@/components/Section'
-import Card from '@/components/Card'
-import Button from '@/components/Button'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { UserPlus, User, Building, Briefcase, Mail, Lock } from "lucide-react";
+import { signUpEmailPassword } from "@/lib/auth";
+import { useUser } from "@/context/UserContext";
+import PageHero from "@/components/PageHero";
+import Section from "@/components/Section";
+import Card from "@/components/Card";
+import Button from "@/components/Button";
 
 export default function SignUpPage() {
   const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    org: '',
-    role: '',
-    industry: '',
-    password: '',
-    confirmPassword: ''
-  })
-  const [isLoading, setIsLoading] = useState(false)
-  const router = useRouter()
+    name: "",
+    email: "",
+    org: "",
+    role: "",
+    industry: "",
+    password: "",
+    confirmPassword: "",
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const router = useRouter();
+  const { setUser } = useUser();
 
   const industries = [
     "Primary Aluminium",
-    "Secondary Aluminium", 
+    "Secondary Aluminium",
     "Copper Smelting/Refining",
     "Rolling/Extrusion",
     "Recycling/EPR",
-    "Other"
-  ]
+    "Other",
+  ];
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
-    
+    e.preventDefault();
+    setError(null);
     if (formData.password !== formData.confirmPassword) {
-      alert('Passwords do not match')
-      return
+      setError("Passwords do not match");
+      return;
     }
-
-    setIsLoading(true)
-
-    // Mock validation and save
-    console.log('Sign up data:', formData)
-
-    // Simulate API call delay
-    setTimeout(() => {
-      const userData = {
+    setIsLoading(true);
+    try {
+      const profile = await signUpEmailPassword({
         name: formData.name,
         email: formData.email,
+        password: formData.password,
         org: formData.org,
         role: formData.role,
-        industry: formData.industry
-      }
-      
-      localStorage.setItem('dc_user', JSON.stringify(userData))
-      setIsLoading(false)
-      router.push('/projects/new')
-    }, 1500)
-  }
+        industry: formData.industry,
+      });
+      setUser(profile);
+      router.push("/projects/new");
+    } catch (err) {
+      console.error(err);
+      setError(err.message || "Failed to create account");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <>
@@ -78,6 +80,11 @@ export default function SignUpPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
+              {error && (
+                <div className="text-sm text-red-600 bg-red-50 border border-red-200 p-3 rounded-lg">
+                  {error}
+                </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -91,7 +98,9 @@ export default function SignUpPage() {
                       className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-emerald focus:border-transparent"
                       placeholder="John Doe"
                       value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, name: e.target.value })
+                      }
                     />
                   </div>
                 </div>
@@ -108,7 +117,9 @@ export default function SignUpPage() {
                       className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-emerald focus:border-transparent"
                       placeholder="john@company.com"
                       value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, email: e.target.value })
+                      }
                     />
                   </div>
                 </div>
@@ -127,7 +138,9 @@ export default function SignUpPage() {
                       className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-emerald focus:border-transparent"
                       placeholder="Company Name"
                       value={formData.org}
-                      onChange={(e) => setFormData({ ...formData, org: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, org: e.target.value })
+                      }
                     />
                   </div>
                 </div>
@@ -144,7 +157,9 @@ export default function SignUpPage() {
                       className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-emerald focus:border-transparent"
                       placeholder="Sustainability Manager"
                       value={formData.role}
-                      onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, role: e.target.value })
+                      }
                     />
                   </div>
                 </div>
@@ -158,11 +173,15 @@ export default function SignUpPage() {
                   required
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-emerald focus:border-transparent"
                   value={formData.industry}
-                  onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, industry: e.target.value })
+                  }
                 >
                   <option value="">Select Industry</option>
                   {industries.map((industry) => (
-                    <option key={industry} value={industry}>{industry}</option>
+                    <option key={industry} value={industry}>
+                      {industry}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -181,7 +200,9 @@ export default function SignUpPage() {
                       className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-emerald focus:border-transparent"
                       placeholder="••••••••"
                       value={formData.password}
-                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, password: e.target.value })
+                      }
                     />
                   </div>
                 </div>
@@ -198,7 +219,12 @@ export default function SignUpPage() {
                       className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-emerald focus:border-transparent"
                       placeholder="••••••••"
                       value={formData.confirmPassword}
-                      onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          confirmPassword: e.target.value,
+                        })
+                      }
                     />
                   </div>
                 </div>
@@ -210,14 +236,17 @@ export default function SignUpPage() {
                 size="lg"
                 disabled={isLoading}
               >
-                {isLoading ? 'Creating Account...' : 'Create Account'}
+                {isLoading ? "Creating Account..." : "Create Account"}
               </Button>
             </form>
 
             <div className="mt-6 text-center">
               <p className="text-gray-600">
-                Already have an account?{' '}
-                <Link href="/auth/signin" className="text-brand-emerald hover:underline font-medium">
+                Already have an account?{" "}
+                <Link
+                  href="/auth/signin"
+                  className="text-brand-emerald hover:underline font-medium"
+                >
                   Sign in
                 </Link>
               </p>
@@ -226,5 +255,5 @@ export default function SignUpPage() {
         </div>
       </Section>
     </>
-  )
+  );
 }

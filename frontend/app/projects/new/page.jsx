@@ -1,51 +1,80 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Plus, Globe, TrendingUp } from 'lucide-react'
-import PageHero from '@/components/PageHero'
-import Section from '@/components/Section'
-import Card from '@/components/Card'
-import Button from '@/components/Button'
-import FeatureIcon from '@/components/FeatureIcon'
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { Plus, Globe, TrendingUp } from "lucide-react";
+import PageHero from "@/components/PageHero";
+import Section from "@/components/Section";
+import Card from "@/components/Card";
+import Button from "@/components/Button";
+import FeatureIcon from "@/components/FeatureIcon";
+import { createProject } from "@/lib/projects";
+import { useUser } from "@/context/UserContext";
 
 export default function NewProjectPage() {
+  const { user, loading } = useUser();
   const [formData, setFormData] = useState({
-    projectName: '',
-    metal: '',
-    geography: 'India',
-    method: 'IPCC GWP100',
-    dataSource: 'India Defaults'
-  })
-  const router = useRouter()
+    projectName: "",
+    metal: "",
+    geography: "India",
+    method: "IPCC GWP100",
+    dataSource: "India Defaults",
+    studyType: "internal_decision_support",
+    analysisType: "cradle_to_gate",
+    reportType: "technical",
+  });
+  const router = useRouter();
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    
-    // Generate project ID
-    const projectId = Date.now().toString()
-    
-    // Save project to localStorage
-    const projectData = {
-      id: projectId,
-      ...formData,
-      createdAt: new Date().toISOString()
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError(null);
+    setCreating(true);
+    try {
+      if (!user) throw new Error("You must be signed in to create a project");
+      const projectId = await createProject(
+        {
+          name: formData.projectName,
+          metal: formData.metal,
+          geography: formData.geography,
+          method: formData.method,
+          dataSource: formData.dataSource,
+          studyType: formData.studyType,
+          analysisType: formData.analysisType,
+          reportType: formData.reportType,
+          status: "draft",
+        },
+        user
+      );
+      router.push(`/projects/${projectId}/upload`);
+    } catch (err) {
+      console.error(err);
+      setError(err.message || "Failed to create project");
+    } finally {
+      setCreating(false);
     }
-    
-    const projects = JSON.parse(localStorage.getItem('dc_projects') || '{}')
-    projects[projectId] = {
-      meta: projectData,
-      sheetJSON: null,
-      mappedJSON: null,
-      resultsJSON: null
+  };
+
+  // Redirect unauthenticated users once loading completes
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push("/auth/signin");
     }
-    localStorage.setItem('dc_projects', JSON.stringify(projects))
-    
-    console.log('New project created:', projectData)
-    
-    // Navigate to upload page
-    router.push(`/projects/${projectId}/upload`)
+  }, [loading, user, router]);
+
+  if (loading || (!user && typeof window !== "undefined")) {
+    return (
+      <Section>
+        <div className="max-w-2xl mx-auto py-20 text-center text-gray-500">
+          Loading user...
+        </div>
+      </Section>
+    );
   }
+
+  if (!user) return null; // safety
 
   return (
     <>
@@ -61,11 +90,17 @@ export default function NewProjectPage() {
               <FeatureIcon icon={Plus} size="lg" className="mx-auto mb-4" />
               <h2 className="text-2xl font-semibold mb-2">Project Setup</h2>
               <p className="text-gray-600">
-                Configure your analysis parameters to ensure accurate and relevant results
+                Configure your analysis parameters to ensure accurate and
+                relevant results
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
+              {error && (
+                <div className="text-sm text-red-600 bg-red-50 border border-red-200 p-3 rounded-lg">
+                  {error}
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Project Name
@@ -76,7 +111,9 @@ export default function NewProjectPage() {
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-emerald focus:border-transparent"
                   placeholder="e.g., Aluminium Ingot Production - Plant ABC"
                   value={formData.projectName}
-                  onChange={(e) => setFormData({ ...formData, projectName: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, projectName: e.target.value })
+                  }
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   Choose a descriptive name for easy identification
@@ -91,7 +128,9 @@ export default function NewProjectPage() {
                   required
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-emerald focus:border-transparent"
                   value={formData.metal}
-                  onChange={(e) => setFormData({ ...formData, metal: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, metal: e.target.value })
+                  }
                 >
                   <option value="">Select Metal</option>
                   <option value="Aluminium">Aluminium</option>
@@ -110,7 +149,9 @@ export default function NewProjectPage() {
                     <select
                       className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-emerald focus:border-transparent"
                       value={formData.geography}
-                      onChange={(e) => setFormData({ ...formData, geography: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, geography: e.target.value })
+                      }
                     >
                       <option value="India">India</option>
                       <option value="Asia-Pacific">Asia-Pacific</option>
@@ -128,13 +169,72 @@ export default function NewProjectPage() {
                     <select
                       className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-emerald focus:border-transparent"
                       value={formData.method}
-                      onChange={(e) => setFormData({ ...formData, method: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, method: e.target.value })
+                      }
                     >
                       <option value="IPCC GWP100">IPCC GWP100</option>
                       <option value="ReCiPe 2016">ReCiPe 2016</option>
                       <option value="EF 3.0">EF 3.0</option>
                     </select>
                   </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Study Type
+                  </label>
+                  <select
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-emerald focus:border-transparent"
+                    value={formData.studyType}
+                    onChange={(e) =>
+                      setFormData({ ...formData, studyType: e.target.value })
+                    }
+                  >
+                    <option value="internal_decision_support">
+                      Internal Decision Support
+                    </option>
+                    <option value="comparative_assertion">
+                      Comparative Assertion
+                    </option>
+                    <option value="public_communication">
+                      Public Communication
+                    </option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Analysis Type
+                  </label>
+                  <select
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-emerald focus:border-transparent"
+                    value={formData.analysisType}
+                    onChange={(e) =>
+                      setFormData({ ...formData, analysisType: e.target.value })
+                    }
+                  >
+                    <option value="cradle_to_gate">Cradle to Gate</option>
+                    <option value="cradle_to_grave">Cradle to Grave</option>
+                    <option value="gate_to_gate">Gate to Gate</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Report Type
+                  </label>
+                  <select
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-emerald focus:border-transparent"
+                    value={formData.reportType}
+                    onChange={(e) =>
+                      setFormData({ ...formData, reportType: e.target.value })
+                    }
+                  >
+                    <option value="technical">Technical</option>
+                    <option value="executive">Executive</option>
+                    <option value="regulatory">Regulatory</option>
+                  </select>
                 </div>
               </div>
 
@@ -145,20 +245,27 @@ export default function NewProjectPage() {
                 <select
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-brand-emerald focus:border-transparent"
                   value={formData.dataSource}
-                  onChange={(e) => setFormData({ ...formData, dataSource: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, dataSource: e.target.value })
+                  }
                 >
                   <option value="India Defaults">India Defaults</option>
                   <option value="Custom Dataset">Custom Dataset</option>
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
-                  India Defaults include local grid mix, transport patterns, and recycling data
+                  India Defaults include local grid mix, transport patterns, and
+                  recycling data
                 </p>
               </div>
 
               <div className="bg-brand-sky rounded-xl p-4">
-                <h4 className="font-semibold text-brand-forest mb-2">India-Calibrated Defaults Include:</h4>
+                <h4 className="font-semibold text-brand-forest mb-2">
+                  India-Calibrated Defaults Include:
+                </h4>
                 <ul className="text-sm text-brand-forest space-y-1">
-                  <li>• State-wise electricity grid emission factors (2023-24)</li>
+                  <li>
+                    • State-wise electricity grid emission factors (2023-24)
+                  </li>
                   <li>• Transport mix optimization (road vs rail logistics)</li>
                   <li>• Domestic scrap availability and recycling rates</li>
                   <li>• Industrial process efficiency benchmarks</li>
@@ -169,13 +276,14 @@ export default function NewProjectPage() {
                 type="submit"
                 className="w-full"
                 size="lg"
+                disabled={creating}
               >
-                Create Project & Continue
+                {creating ? "Creating..." : "Create Project & Continue"}
               </Button>
             </form>
           </Card>
         </div>
       </Section>
     </>
-  )
+  );
 }
