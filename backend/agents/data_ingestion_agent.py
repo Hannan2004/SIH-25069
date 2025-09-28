@@ -117,11 +117,11 @@ class DataIngestionAgent:
             return {"success": False, "error": str(e)}
 
 # Example usage
-if __name__ == "__main__":
-    agent = DataIngestionAgent()
-    file_path = "LCA_SHEET.xlsx"  # Replace with your file
-    goal = "CO2 footprint of aluminum production"
-    scope = "cradle_to_gate"
-    functional_unit = "1 kg aluminum"
-    result = agent.ingest_data(file_path, goal, scope, functional_unit)
-    print(json.dumps(result, indent=2))
+#if __name__ == "__main__":
+#    agent = DataIngestionAgent()
+#    file_path = "LCA_SHEET.xlsx"  # Replace with your file
+#    goal = "CO2 footprint of aluminum production"
+#    scope = "cradle_to_gate"
+#    functional_unit = "1 kg aluminum"
+#    result = agent.ingest_data(file_path, goal, scope, functional_unit)
+#    print(json.dumps(result, indent=2))
