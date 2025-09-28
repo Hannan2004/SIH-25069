@@ -1,0 +1,43 @@
+{
+  "analysis_info": {
+    "timestamp": "2025-09-26T09:27:36.756986",
+    "analysis_type": "cradle_to_gate",
+    "study_type": "internal_decision_support",
+    "scenarios_count": 1
+  },
+  "materials_info": [
+    {
+      "material": "steel",
+      "mass_kg": 150.0,
+      "emissions_kg_co2e": 808.0421999999999,
+      "circularity_index": 0.5375000000000001
+    }
+  ],
+  "carbon_footprint": {
+    "total_kg_co2e": 808.0421999999999,
+    "per_kg_material": 5.386947999999999
+  },
+  "emissions_breakdown": {
+    "production_kg_co2e": 473.99999999999994,
+    "transport_kg_co2e": 4.65,
+    "energy_kg_co2e": 329.3922,
+    "end_of_life_kg_co2e": 0,
+    "total_kg_co2e": 808.0421999999999
+  },
+  "circularity_metrics": {
+    "recycled_content": 0.4,
+    "collection_rate": 0.75,
+    "recycling_efficiency": 0.9,
+    "output_circularity": 0.675,
+    "circularity_index": 0.5375000000000001,
+    "circularity_grade": "C"
+  },
+  "sustainability_score": {},
+  "compliance_summary": {
+    "overall_score": 0.375,
+    "grade": "F",
+    "status": "Non-Compliant",
+    "study_type": "internal_decision_support"
+  },
+  "recommendations": []
+}
