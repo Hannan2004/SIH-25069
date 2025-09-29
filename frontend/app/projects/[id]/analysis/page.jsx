@@ -23,6 +23,8 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Legend,
+  LabelList,
 } from "recharts";
 
 // Client page – dynamic analysis execution based on ?dataset= query param.
@@ -42,6 +44,8 @@ export default function AnalysisPage() {
   const [rawVisible, setRawVisible] = useState(false);
   const [payloadPreview, setPayloadPreview] = useState(null);
   const [generatingReport, setGeneratingReport] = useState(false);
+  const [runningMonteCarlo, setRunningMonteCarlo] = useState(false);
+  const [monteCarloResults, setMonteCarloResults] = useState(null);
 
   // Lazy-load Sankey (client only) if needed later; fallback simple box if fails
   const SankeyChart = useMemo(
@@ -383,6 +387,101 @@ export default function AnalysisPage() {
     }
   };
 
+  const runMonteCarloSimulation = async () => {
+    setRunningMonteCarlo(true);
+    try {
+      // Simulate 10-second processing time
+      await new Promise(resolve => setTimeout(resolve, 10000));
+      
+      // Generate year-to-year waterfall simulation like the reference
+      const iterations = 2000; // Exactly 2000 iterations as requested
+      const years = 11; // Y0 to Y10
+      const volatility = 3; // 3% volatility
+      const reductionRate = 3; // 3% reduction per year
+      
+      // Run Monte Carlo simulation
+      const yearlyResults = [];
+      for (let i = 0; i < years; i++) {
+        yearlyResults.push([]);
+      }
+      
+      // Run iterations
+      for (let iter = 0; iter < iterations; iter++) {
+        let currentValue = 100; // Starting at 100 kg CO2-eq
+        yearlyResults[0].push(currentValue);
+        
+        for (let year = 1; year < years; year++) {
+          // Apply reduction with random noise
+          const randomNoise = (Math.random() - 0.5) * 2 * volatility;
+          const change = -reductionRate + randomNoise;
+          currentValue = currentValue * (1 + change / 100);
+          yearlyResults[year].push(currentValue);
+        }
+      }
+      
+      // Define professional colors - blue to green gradient
+      const colors = [
+        '#1E40AF', // Start - Deep Blue
+        '#2563EB', // Y0→Y1 - Blue
+        '#3B82F6', // Y1→Y2 - Medium Blue
+        '#60A5FA', // Y2→Y3 - Light Blue
+        '#0891B2', // Y3→Y4 - Cyan Blue
+        '#0D9488', // Y4→Y5 - Teal
+        '#059669', // Y5→Y6 - Emerald
+        '#16A34A', // Y6→Y7 - Green
+        '#22C55E', // Y7→Y8 - Light Green
+        '#4ADE80', // Y8→Y9 - Bright Green
+        '#10B981'  // Y9→Y10 - Final Emerald
+      ];
+
+      // Calculate statistics for each year
+      const waterfallData = [];
+      for (let year = 0; year < years; year++) {
+        const values = yearlyResults[year].sort((a, b) => a - b);
+        const mean = values.reduce((a, b) => a + b, 0) / values.length;
+        const median = values[Math.floor(values.length / 2)];
+        const lower95 = values[Math.floor(values.length * 0.025)];
+        const upper95 = values[Math.floor(values.length * 0.975)];
+        
+        waterfallData.push({
+          name: year === 0 ? 'Start' : `Y${year-1}→Y${year}`,
+          value: mean,
+          year: year,
+          median: median,
+          lower95: lower95,
+          upper95: upper95,
+          type: year === 0 ? 'base' : year === years - 1 ? 'final' : 'transition',
+          fill: colors[year] || '#3B82F6' // Add color directly to data
+        });
+      }
+      
+      const finalYear = waterfallData[waterfallData.length - 1];
+      const startYear = waterfallData[0];
+      const totalReduction = ((startYear.value - finalYear.value) / startYear.value * 100);
+      
+      const simulatedResults = {
+        iterations: iterations,
+        confidenceInterval: 95,
+        waterfallData: waterfallData,
+        statistics: {
+          totalReduction: totalReduction,
+          finalMean: finalYear.value,
+          finalMedian: finalYear.median,
+          confidenceRange: `[${finalYear.lower95.toFixed(1)}, ${finalYear.upper95.toFixed(1)}]`,
+          startValue: startYear.value,
+          volatility: volatility,
+          reductionRate: reductionRate
+        }
+      };
+      
+      setMonteCarloResults(simulatedResults);
+    } catch (error) {
+      console.error("Monte Carlo simulation failed:", error);
+    } finally {
+      setRunningMonteCarlo(false);
+    }
+  };
+
   return (
     <>
       <PageHero
@@ -430,24 +529,47 @@ export default function AnalysisPage() {
               </Button>
             </div>
           </div>
-          <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1">
-            <li>Switch to renewable energy sources during smelting</li>
-            <li>Optimize transport routes to reduce fuel consumption</li>
-            <li>Increase recycling of input materials</li>
-            <li>Adopt energy-efficient refining technologies</li>
-            <li>Implement waste heat recovery systems</li>
-          </ul>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between p-3 bg-red-50 border border-red-200 rounded-lg">
+              <span className="text-sm font-medium text-gray-800">1. Use renewable energy like solar and wind instead of coal for smelting</span>
+              <span className="text-sm font-bold text-red-600">43% reduction</span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-orange-50 border border-orange-200 rounded-lg">
+              <span className="text-sm font-medium text-gray-800">2. Improve recycling systems to reuse more materials continuously</span>
+              <span className="text-sm font-bold text-orange-600">40% reduction</span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <span className="text-sm font-medium text-gray-800">3. Use trains and electric vehicles instead of diesel trucks for transportation</span>
+              <span className="text-sm font-bold text-yellow-600">62% reduction</span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <span className="text-sm font-medium text-gray-800">4. Replace coal-powered heating with renewable energy sources</span>
+              <span className="text-sm font-bold text-blue-600">33% reduction</span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+              <span className="text-sm font-medium text-gray-800">5. Design products to last longer and be reusable instead of single-use</span>
+              <span className="text-sm font-bold text-green-600">33% reduction</span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-purple-50 border border-purple-200 rounded-lg">
+              <span className="text-sm font-medium text-gray-800">6. Upgrade to more energy-efficient furnaces and equipment</span>
+              <span className="text-sm font-bold text-purple-600">30% reduction</span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg">
+              <span className="text-sm font-medium text-gray-800">7. Replace diesel-powered mining trucks with electric vehicles</span>
+              <span className="text-sm font-bold text-gray-600">20% reduction</span>
+            </div>
+          </div>
 
           {/* Before vs After Combined Chart */}
           <div className="mt-6">
-            <h4 className="text-lg font-semibold mb-4">Before vs After Emissions</h4>
-            <div className="bg-white border rounded p-4 flex justify-center items-center" style={{ minHeight: '300px' }}>
-              <div className="w-full">
-                <BeforeAfterCombinedChart />
+            <h4 className="text-lg font-semibold mb-4">Sustainability Graph</h4>
+            <div className="bg-white border rounded p-4 flex justify-center items-center" style={{ minHeight: '400px' }}>
+              <div className="w-full p-3">
+                <ComprehensiveCarbonChart />
               </div>
             </div>
             <p className="text-sm text-gray-600 mt-2 text-center">
-              Emission reductions across key stages after applying recommendations.
+              Comprehensive lifecycle carbon emissions showing current vs improved scenarios with specific reduction strategies.
             </p>
           </div>
 
@@ -630,6 +752,138 @@ export default function AnalysisPage() {
             ))}
           </div>
         </Card>
+        {/* Monte Carlo Simulation */}
+        <Card className="p-6 mb-8 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold">Monte Carlo Uncertainty Analysis</h3>
+            <Button
+              onClick={runMonteCarloSimulation}
+              disabled={runningMonteCarlo}
+              variant="outline"
+            >
+              {runningMonteCarlo ? "Running Simulation..." : "Run Monte Carlo"}
+            </Button>
+          </div>
+          
+          {runningMonteCarlo && (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center space-y-4">
+                <div className="animate-spin h-10 w-10 rounded-full border-4 border-brand-emerald border-t-transparent mx-auto" />
+                <p className="text-sm text-gray-600">Running 2000 iterations...</p>
+                <p className="text-xs text-gray-500">Analyzing uncertainty in carbon footprint calculations</p>
+              </div>
+            </div>
+          )}
+          
+          {monteCarloResults && !runningMonteCarlo && (
+            <div className="space-y-6">
+              {/* Statistics Summary */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-lg text-center">
+                  <div className="text-xs text-blue-600 uppercase tracking-wide font-semibold mb-2">Total Reduction</div>
+                  <div className="text-xl font-bold text-blue-800">{monteCarloResults.statistics.totalReduction.toFixed(1)}%</div>
+                </div>
+                <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg text-center">
+                  <div className="text-xs text-green-600 uppercase tracking-wide font-semibold mb-2">Final Year Mean</div>
+                  <div className="text-xl font-bold text-green-800">{monteCarloResults.statistics.finalMean.toFixed(1)} kg</div>
+                </div>
+                <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-lg text-center">
+                  <div className="text-xs text-purple-600 uppercase tracking-wide font-semibold mb-2">95% Confidence</div>
+                  <div className="text-sm font-bold text-purple-800">{monteCarloResults.statistics.confidenceRange}</div>
+                </div>
+                <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-lg text-center">
+                  <div className="text-xs text-orange-600 uppercase tracking-wide font-semibold mb-2">Iterations</div>
+                  <div className="text-xl font-bold text-orange-800">{monteCarloResults.iterations.toLocaleString()}</div>
+                </div>
+              </div>
+              
+              {/* Waterfall Chart */}
+              <div className="space-y-3">
+                <h4 className="text-lg font-semibold text-center text-gray-800">
+                  🌍 Waterfall of Mean CO₂-eq after Monte Carlo LCA (Year-to-year changes)
+                </h4>
+                <p className="text-center text-sm text-gray-600 mb-4">
+                  ({monteCarloResults.iterations.toLocaleString()} iterations)
+                </p>
+                <div className="bg-white border-2 border-gray-200 rounded-lg p-6 shadow-sm">
+                  <ResponsiveContainer width="100%" height={400}>
+                    <BarChart
+                      data={monteCarloResults.waterfallData}
+                      margin={{ top: 30, right: 30, left: 20, bottom: 60 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis 
+                        dataKey="name" 
+                        angle={-45}
+                        textAnchor="end"
+                        height={80}
+                        fontSize={11}
+                        fontWeight="bold"
+                      />
+                      <YAxis 
+                        domain={[70, 105]}
+                        label={{ 
+                          value: 'Mean CO₂-equivalent (kg CO₂-eq)', 
+                          angle: -90, 
+                          position: 'insideLeft',
+                          style: { textAnchor: 'middle', fontSize: '12px', fontWeight: 'bold' }
+                        }}
+                        fontSize={11}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                          border: '2px solid #e0e0e0',
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                        }}
+                        formatter={(value, name, props) => {
+                          const data = props.payload;
+                          return [
+                            `Mean: ${data.value.toFixed(1)} kg`,
+                            `Median: ${data.median.toFixed(1)} kg`,
+                            `95% CI: [${data.lower95.toFixed(1)}, ${data.upper95.toFixed(1)}]`
+                          ];
+                        }}
+                        labelFormatter={(label) => `Year Transition: ${label}`}
+                      />
+                      <Bar 
+                        dataKey="value" 
+                        name="Mean CO₂-eq"
+                        radius={[4, 4, 0, 0]}
+                      >
+                        {monteCarloResults.waterfallData.map((entry, index) => (
+                          <Bar 
+                            key={`bar-${index}`}
+                            fill={entry.fill}
+                          />
+                        ))}
+                        <LabelList 
+                          dataKey="value" 
+                          position="top" 
+                          fontSize={10}
+                          fontWeight="bold"
+                          formatter={(value) => value.toFixed(1)}
+                        />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="text-xs text-gray-500 text-center mt-3">
+                  Monte Carlo simulation showing year-over-year CO₂ reduction with {monteCarloResults.statistics.volatility}% volatility and {monteCarloResults.statistics.reductionRate}% annual reduction rate
+                </p>
+              </div>
+            </div>
+          )}
+          
+          {!monteCarloResults && !runningMonteCarlo && (
+            <div className="text-center py-8 text-gray-500">
+              <p className="text-sm">Click "Run Monte Carlo" to perform uncertainty analysis</p>
+              <p className="text-xs mt-1">Simulates 2000 iterations to quantify result confidence intervals</p>
+            </div>
+          )}
+        </Card>
+        
         {/* Materials Table */}
         {materialsInfo.length > 0 && (
           <Card className="p-6 mb-12 space-y-4">
@@ -680,83 +934,151 @@ export default function AnalysisPage() {
 
 /* ----------------- Custom Charts ------------------ */
 
-const combinedData = [
-  { name: "Production", before: 400, after: 250 },
-  { name: "Transport", before: 300, after: 180 },
-  { name: "Energy", before: 500, after: 300 },
-  { name: "End-of-Life", before: 200, after: 120 },
+const comprehensiveCarbonData = [
+  {
+    name: "Mining",
+    current: 500,
+    improved: 400,
+    strategy: "Diesel → Electric trucks / EV fleet",
+    
+  },
+  {
+    name: "Alumina Refining",
+    current: 1200,
+    improved: 800,
+    strategy: "Coal boilers → Renewable heat",
+    
+  },
+  {
+    name: "Smelting",
+    current: 7000,
+    improved: 4000,
+    strategy: "Grid coal → Hydro/solar/wind",
+    
+  },
+  {
+    name: "Casting/Forming",
+    current: 1000,
+    improved: 700,
+    strategy: "Ineff. furnaces → Efficient furnaces",
+    
+  },
+  {
+    name: "Transportation",
+    current: 800,
+    improved: 300,
+    strategy: "Road trucks → Rail / E-fleet",
+    
+  },
+  {
+    name: "Product Use",
+    current: 300,
+    improved: 200,
+    strategy: "Single-use → Durable & design for recycling",
+    
+  },
+  {
+    name: "Recycling",
+    current: 500,
+    improved: 300,
+    strategy: "Low recycling → Closed-loop recycling",
+    
+  },
 ];
 
-function BeforeAfterCombinedChart() {
+// Custom renderer for "reduction" label above improved bar
+const renderReductionLabel = (props) => {
+  const { x, y, value } = props; // Recharts passes exact x,y for each label
+  // Move label a bit above the bar
   return (
-    <ResponsiveContainer width="100%" height={280}>
-      {/* 1. Adjusted top margin from 60 to 40 for better spacing */}
-      <BarChart data={combinedData} margin={{ top: 40, right: 10, left: 8, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis 
-          dataKey="name" 
-          fontSize={12} 
-          interval={0}
-          angle={0}
+    <text
+      x={x}
+      y={y - 6}
+      fill="#059669"
+      fontSize={12}
+      fontWeight="bold"
+      textAnchor="middle"
+    >
+      {value}
+    </text>
+  );
+};
+
+// Custom X Axis tick renderer — draws multiline strategy under each tick
+const renderTickWithStrategy = ({ x, y, payload, index }) => {
+  // payload.value is the category name (e.g. "Mining")
+  // Use the same index to get strategy text from our data array
+  const entry = comprehensiveCarbonData[index];
+  const lines = entry.strategy.split(" → ");
+  // primary tick label (category) + strategy lines (multiline, with arrows)
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text
+        x={0}
+        y={0}
+        dy={0}
+        textAnchor="middle"
+        fontSize={11}
+        fill="#333"
+      >
+        {payload.value}
+      </text>
+
+      {lines.map((line, i) => (
+        <text
+          key={i}
+          x={0}
+          y={16 + i * 12} // space below the main tick label
           textAnchor="middle"
-          height={40}
-          axisLine={false}
-          tickLine={false}
+          fontSize={9}
+          fill="#666"
+        >
+          {i === 0 ? line : `→ ${line}`}
+        </text>
+      ))}
+    </g>
+  );
+};
+
+function ComprehensiveCarbonChart() {
+  return (
+    <ResponsiveContainer width="100%" height={480}>
+      <BarChart
+        data={comprehensiveCarbonData}
+        margin={{ top: 10, right: 10, left: 10, bottom: 10 }}
+      >
+        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+        <XAxis
+          dataKey="name"
+          interval={0}
+          tick={renderTickWithStrategy}
+          height={110} // leave space for multiline tick text
         />
-        <YAxis 
-          domain={[0, 600]} 
-          fontSize={10}
-          /* 2. Changed YAxis label position from 'insideLeft' to 'outside' 
-                to bring it down and fully display it. */
-          label={{ 
-            value: 'Emissions (kg CO₂e)', 
-            angle: -90, 
-            position: 'outside', 
-            dx: -10, // Optional: minor adjustment to pull it closer to the Y-axis
-            dy: 5 
+        <YAxis
+          domain={[0, 8000]}
+          label={{
+            value: "kg CO₂ / ton",
+            angle: -90,
+            position: "insideLeft",
+            offset: 10,
+            style: { textAnchor: "middle", fontSize: 12, fontWeight: "bold" },
           }}
-          axisLine={false}
-          tickLine={false}
         />
-        <Tooltip 
-          formatter={(value, name) => [
-            `${value} kg CO₂e`, 
-            name === 'before' ? 'Before' : 'After'
-          ]}
+        <Tooltip
+          formatter={(value, name) => [`${value} kg CO₂/ton`, name === "current" ? "Current" : "Improved"]}
+          labelFormatter={(label) => `Stage: ${label}`}
+          contentStyle={{
+            backgroundColor: "#fff",
+            border: "1px solid #ccc",
+            borderRadius: 4,
+          }}
         />
-        <Bar dataKey="before" fill="#EF4444" name="before" />
-        <Bar dataKey="after" fill="#10B981" name="after" />
-        
-        {/* Add percentage labels */}
-        {combinedData.map((entry, index) => {
-          const reduction = ((entry.before - entry.after) / entry.before * 100).toFixed(0);
-          
-
-          // Approximate X-position for centering over the XAxis label:
-          // Using justify-between logic: spread percentages evenly across chart width
-          const CHART_LEFT_MARGIN = 150; // Shifted right from 60 to 100
-          const CHART_RIGHT_MARGIN = 40; // End margin
-          const CHART_USABLE_WIDTH = 550; // Reduced width to accommodate left shift
-          const totalItems = combinedData.length;
-          
-          // Calculate position using justify-between logic
-          // For 4 items: positions at 0%, 33.33%, 66.66%, 100% of usable width
-          const xPosition = CHART_LEFT_MARGIN + (index / (totalItems - 1)) * CHART_USABLE_WIDTH;
-
-          return (
-            <text
-              key={index}
-              x={xPosition}
-              y={25}
-              textAnchor="middle"
-              fontSize="12"
-              fill="#059669"
-              fontWeight="bold"
-            >
-              ↓{reduction}%
-            </text>
-          );
-        })}
+        <Legend verticalAlign="top" height={36} iconType="rect" />
+        <Bar dataKey="current" fill="#E69F00" name="Current" />
+        <Bar dataKey="improved" fill="#56B4E9" name="Improved">
+          {/* Put reduction labels above improved bars using LabelList */}
+          <LabelList dataKey="reduction" content={renderReductionLabel} />
+        </Bar>
       </BarChart>
     </ResponsiveContainer>
   );

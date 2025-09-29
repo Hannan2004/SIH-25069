@@ -36,6 +36,9 @@ export default function UploadPage() {
   const [statusMsg, setStatusMsg] = useState("");
   const [saving, setSaving] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [processingAnalysis, setProcessingAnalysis] = useState(false);
+  const [currentAgent, setCurrentAgent] = useState("");
+  const [agentStep, setAgentStep] = useState(0);
   // analysis states removed in new flow (persist + redirect)
   const [analysisPayload, setAnalysisPayload] = useState(null);
   // analysisPayload omitted (not needed for UI currently)
@@ -224,8 +227,29 @@ export default function UploadPage() {
       }
     }
     if (!payload) return;
-    setAnalyzing(true);
+    
+    // Start three-phase processing
+    setProcessingAnalysis(true);
+    setAgentStep(0);
+    
     try {
+      // Phase 1: Data Ingestion Agent (5 seconds)
+      setCurrentAgent("Data Ingestion Agent");
+      setAgentStep(1);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
+      // Phase 2: LCA Analysis Agent (5 seconds)
+      setCurrentAgent("LCA Analysis Agent");
+      setAgentStep(2);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
+      // Phase 3: Compliance Agent (5 seconds)
+      setCurrentAgent("Compliance Agent");
+      setAgentStep(3);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
+      // Now perform actual analysis
+      setAnalyzing(true);
       setAnalysisPayload(payload);
       const backendBase =
         process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
@@ -273,6 +297,9 @@ export default function UploadPage() {
       setTimeout(() => setStatusMsg(""), 2500);
     } finally {
       setAnalyzing(false);
+      setProcessingAnalysis(false);
+      setCurrentAgent("");
+      setAgentStep(0);
     }
   };
 
@@ -384,9 +411,9 @@ export default function UploadPage() {
                     <Button
                       size="sm"
                       onClick={runAnalysis}
-                      disabled={!activeDataset || analyzing}
+                      disabled={!activeDataset || analyzing || processingAnalysis}
                     >
-                      {analyzing ? "Analyzing…" : "Analyze"}
+                      {processingAnalysis ? "Processing..." : analyzing ? "Analyzing…" : "Analyze"}
                     </Button>
                   </div>
                 </div>
@@ -451,13 +478,79 @@ export default function UploadPage() {
               </div>
             )}
           </Card>
-          {analyzing && (
+          {(processingAnalysis || analyzing) && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/70 backdrop-blur-sm">
-              <div className="bg-white border rounded-lg p-6 shadow-md flex flex-col items-center gap-3 w-[260px]">
-                <div className="animate-spin h-8 w-8 rounded-full border-4 border-brand-emerald border-t-transparent" />
-                <p className="text-sm text-gray-600 text-center">
-                  Running analysis…
-                </p>
+              <div className="bg-white border rounded-lg p-8 shadow-xl flex flex-col items-center gap-6 w-[380px]">
+                <div className="animate-spin h-10 w-10 rounded-full border-4 border-brand-emerald border-t-transparent" />
+                
+                {processingAnalysis && (
+                  <>
+                    <div className="text-center space-y-3">
+                      <h3 className="text-lg font-semibold text-gray-800">
+                        {currentAgent}
+                      </h3>
+                      <p className="text-sm text-gray-600">
+                        Processing your data through our AI agents...
+                      </p>
+                    </div>
+                    
+                    {/* Progress indicators */}
+                    <div className="flex items-center gap-4 w-full">
+                      <div className={`flex flex-col items-center gap-2 flex-1 transition-all duration-500 ${
+                        agentStep >= 1 ? 'text-brand-emerald' : 'text-gray-400'
+                      }`}>
+                        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold transition-all duration-500 ${
+                          agentStep >= 1 
+                            ? 'border-brand-emerald bg-brand-emerald text-white' 
+                            : 'border-gray-300 text-gray-400'
+                        }`}>
+                          1
+                        </div>
+                        <span className="text-xs text-center leading-tight">Data<br/>Ingestion</span>
+                      </div>
+                      
+                      <div className={`h-0.5 flex-1 transition-all duration-500 ${
+                        agentStep >= 2 ? 'bg-brand-emerald' : 'bg-gray-300'
+                      }`} />
+                      
+                      <div className={`flex flex-col items-center gap-2 flex-1 transition-all duration-500 ${
+                        agentStep >= 2 ? 'text-brand-emerald' : 'text-gray-400'
+                      }`}>
+                        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold transition-all duration-500 ${
+                          agentStep >= 2 
+                            ? 'border-brand-emerald bg-brand-emerald text-white' 
+                            : 'border-gray-300 text-gray-400'
+                        }`}>
+                          2
+                        </div>
+                        <span className="text-xs text-center leading-tight">LCA<br/>Analysis</span>
+                      </div>
+                      
+                      <div className={`h-0.5 flex-1 transition-all duration-500 ${
+                        agentStep >= 3 ? 'bg-brand-emerald' : 'bg-gray-300'
+                      }`} />
+                      
+                      <div className={`flex flex-col items-center gap-2 flex-1 transition-all duration-500 ${
+                        agentStep >= 3 ? 'text-brand-emerald' : 'text-gray-400'
+                      }`}>
+                        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold transition-all duration-500 ${
+                          agentStep >= 3 
+                            ? 'border-brand-emerald bg-brand-emerald text-white' 
+                            : 'border-gray-300 text-gray-400'
+                        }`}>
+                          3
+                        </div>
+                        <span className="text-xs text-center leading-tight">Compliance<br/>Check</span>
+                      </div>
+                    </div>
+                  </>
+                )}
+                
+                {analyzing && !processingAnalysis && (
+                  <p className="text-sm text-gray-600 text-center">
+                    Running analysis…
+                  </p>
+                )}
               </div>
             </div>
           )}

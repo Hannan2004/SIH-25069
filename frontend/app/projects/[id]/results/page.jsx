@@ -333,31 +333,7 @@ export default function ResultsPage() {
           </Card>
         </div>
 
-        {/* ✅ New Recommendations Section with Charts */}
-        <Card className="p-6 mb-12">
-          <h3 className="font-semibold mb-3">Key Recommendations</h3>
-          <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1">
-            <li>Switch to renewable energy sources during smelting</li>
-            <li>Optimize transport routes to reduce fuel consumption</li>
-            <li>Increase recycling of input materials</li>
-            <li>Adopt energy-efficient refining technologies</li>
-            <li>Implement waste heat recovery systems</li>
-          </ul>
-
-          {/* Before vs After Combined Chart */}
-          <div className="mt-6">
-            <h4 className="text-lg font-semibold ">Before vs After Emissions</h4>
-            {/* MODIFICATION HERE: Changed 'justify-center items-center' to 'justify-start items-end' */}
-            <div className="bg-white border rounded p-2 flex justify-start items-end" style={{ minHeight: '300px' }}>
-              <div className="w-full">
-                <BeforeAfterCombinedChart />
-              </div>
-            </div>
-            <p className="text-sm text-gray-600 mt-2 text-center">
-              Emission reductions across key stages after applying recommendations.
-            </p>
-          </div>
-        </Card>
+        {/* Key Recommendations card removed per user request */}
 
         <Card className="p-6 mb-12">
           <h3 className="font-semibold mb-3">Professional Technical Report PDF</h3>

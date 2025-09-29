@@ -1,0 +1,43 @@
+{
+  "analysis_info": {
+    "timestamp": "2025-09-29T18:02:52.819663",
+    "analysis_type": "cradle_to_gate",
+    "study_type": "internal_decision_support",
+    "scenarios_count": 1
+  },
+  "materials_info": [
+    {
+      "material": "aluminium (primary)",
+      "mass_kg": 1.0,
+      "emissions_kg_co2e": 48.826357125,
+      "circularity_index": 0.589
+    }
+  ],
+  "carbon_footprint": {
+    "total_kg_co2e": 48.826357125,
+    "per_kg_material": 48.826357125
+  },
+  "emissions_breakdown": {
+    "production_kg_co2e": 12.109,
+    "transport_kg_co2e": 31.0,
+    "energy_kg_co2e": 5.7173571249999995,
+    "end_of_life_kg_co2e": 0,
+    "total_kg_co2e": 48.826357125
+  },
+  "circularity_metrics": {
+    "recycled_content": 0.35,
+    "collection_rate": 0.9,
+    "recycling_efficiency": 0.92,
+    "output_circularity": 0.8280000000000001,
+    "circularity_index": 0.589,
+    "circularity_grade": "C"
+  },
+  "sustainability_score": {},
+  "compliance_summary": {
+    "overall_score": 0.375,
+    "grade": "F",
+    "status": "Non-Compliant",
+    "study_type": "internal_decision_support"
+  },
+  "recommendations": []
+}
