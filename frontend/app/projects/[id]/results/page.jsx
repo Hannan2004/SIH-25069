@@ -500,7 +500,8 @@ const combinedData = [
 function BeforeAfterCombinedChart() {
   return (
     <ResponsiveContainer width="100%" height={280}>
-      <BarChart data={combinedData} margin={{ top: 40, right: 40, left: 50, bottom: 40 }}>
+      {/* 1. Adjusted top margin from 60 to 40 for better spacing */}
+      <BarChart data={combinedData} margin={{ top: 40, right: 10, left: 8, bottom: 0 }}>
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis 
           dataKey="name" 
@@ -514,8 +515,16 @@ function BeforeAfterCombinedChart() {
         />
         <YAxis 
           domain={[0, 600]} 
-          fontSize={12}
-          label={{ value: 'Emissions (kg CO₂e)', angle: -90, position: 'insideLeft' }}
+          fontSize={10}
+          /* 2. Changed YAxis label position from 'insideLeft' to 'outside' 
+                to bring it down and fully display it. */
+          label={{ 
+            value: 'Emissions (kg CO₂e)', 
+            angle: -90, 
+            position: 'outside', 
+            dx: -10, // Optional: minor adjustment to pull it closer to the Y-axis
+            dy: 5 
+          }}
           axisLine={false}
           tickLine={false}
         />
@@ -531,9 +540,18 @@ function BeforeAfterCombinedChart() {
         {/* Add percentage labels */}
         {combinedData.map((entry, index) => {
           const reduction = ((entry.before - entry.after) / entry.before * 100).toFixed(0);
-          const chartWidth = 370; // adjusted for balanced margins
-          const barGroupWidth = chartWidth / combinedData.length;
-          const xPosition = 50 + (index * barGroupWidth) + (barGroupWidth / 2); // centered positioning
+          
+          // Approximate X-position for centering over the XAxis label:
+          // Using justify-between logic: spread percentages evenly across chart width
+          const CHART_LEFT_MARGIN = 150; // Shifted right from 60 to 100
+          const CHART_RIGHT_MARGIN = 40; // End margin
+          const CHART_USABLE_WIDTH = 550; // Reduced width to accommodate left shift
+          const totalItems = combinedData.length;
+          
+          // Calculate position using justify-between logic
+          // For 4 items: positions at 0%, 33.33%, 66.66%, 100% of usable width
+          const xPosition = CHART_LEFT_MARGIN + (index / (totalItems - 1)) * CHART_USABLE_WIDTH;
+
           return (
             <text
               key={index}
