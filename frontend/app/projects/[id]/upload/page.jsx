@@ -227,27 +227,27 @@ export default function UploadPage() {
       }
     }
     if (!payload) return;
-    
+
     // Start three-phase processing
     setProcessingAnalysis(true);
     setAgentStep(0);
-    
+
     try {
       // Phase 1: Data Ingestion Agent (5 seconds)
       setCurrentAgent("Data Ingestion Agent");
       setAgentStep(1);
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+
       // Phase 2: LCA Analysis Agent (5 seconds)
       setCurrentAgent("LCA Analysis Agent");
       setAgentStep(2);
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+
       // Phase 3: Compliance Agent (5 seconds)
       setCurrentAgent("Compliance Agent");
       setAgentStep(3);
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+
       // Now perform actual analysis
       setAnalyzing(true);
       setAnalysisPayload(payload);
@@ -308,19 +308,20 @@ export default function UploadPage() {
       <PageHero
         title="Upload Inventory Data"
         description="Add one or more structured datasets (e.g., Primary Process, Energy Mix, Scrap Flows). Each dataset may include multiple sheets."
+        spacing="standard"
       />
       <Section>
         <div className="space-y-8">
-          <Card className="p-6 space-y-6">
+          <Card className="p-6 space-y-6 bg-white/70 backdrop-blur-sm border border-brand-copper/25">
             <div className="grid md:grid-cols-3 gap-4 items-end">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-brand-steel mb-2">
                   Dataset Type
                 </label>
                 <select
                   value={datasetType}
                   onChange={(e) => setDatasetType(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand-emerald"
+                  className="w-full px-3 py-2 rounded-lg text-sm border border-brand-aluminum/60 bg-white/60 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-brand-copper/60 focus:border-brand-copper/60 placeholder:text-brand-steel/50"
                 >
                   <option value="">Select type…</option>
                   <option>Primary Inventory</option>
@@ -329,12 +330,12 @@ export default function UploadPage() {
                   <option>Transport & Logistics</option>
                   <option>Supplemental Parameters</option>
                 </select>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-brand-steel/60 mt-1">
                   Choose a dataset category before uploading a file.
                 </p>
               </div>
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-brand-steel mb-2">
                   Upload File
                 </label>
                 <UploadDropzone onDataParsed={handleUpload} />
@@ -342,7 +343,9 @@ export default function UploadPage() {
             </div>
             {Object.keys(localDatasets).length === 0 &&
             remoteDatasets.length === 0 ? (
-              <p className="text-sm text-gray-500">No datasets added yet.</p>
+              <p className="text-sm text-brand-steel/70">
+                No datasets added yet.
+              </p>
             ) : (
               <div className="space-y-6">
                 <div className="flex flex-wrap gap-3 items-center">
@@ -360,15 +363,15 @@ export default function UploadPage() {
                         setActiveDataset(ds.id);
                         setActiveSheet(ds.activeSheet || "");
                       }}
-                      className={`px-4 py-2 rounded-full text-xs font-medium border relative transition group ${
+                      className={`px-4 py-2 rounded-full text-xs font-medium border relative transition group shadow-sm ${
                         activeDataset === ds.id
-                          ? "bg-brand-emerald text-white border-brand-emerald"
-                          : "bg-white hover:bg-gray-50"
+                          ? "bg-brand-copper text-white border-brand-copper"
+                          : "bg-white/70 hover:bg-white border-brand-aluminum/60 text-brand-charcoal"
                       }`}
                     >
                       {ds.name || ds.type}
                       {ds.payload && (
-                        <span className="ml-1 text-[10px] text-brand-emerald">
+                        <span className="ml-1 text-[10px] text-brand-gold">
                           ●
                         </span>
                       )}
@@ -382,10 +385,10 @@ export default function UploadPage() {
                         setActiveDataset(key);
                         setActiveSheet(ds.activeSheet);
                       }}
-                      className={`px-4 py-2 rounded-full text-xs font-medium border relative transition group ${
+                      className={`px-4 py-2 rounded-full text-xs font-medium border relative transition group shadow-sm ${
                         activeDataset === key
-                          ? "bg-brand-emerald text-white border-brand-emerald"
-                          : "bg-white hover:bg-gray-50"
+                          ? "bg-brand-copper text-white border-brand-copper"
+                          : "bg-white/70 hover:bg-white border-brand-aluminum/60 text-brand-charcoal"
                       }`}
                     >
                       {ds.label}*
@@ -411,24 +414,30 @@ export default function UploadPage() {
                     <Button
                       size="sm"
                       onClick={runAnalysis}
-                      disabled={!activeDataset || analyzing || processingAnalysis}
+                      disabled={
+                        !activeDataset || analyzing || processingAnalysis
+                      }
                     >
-                      {processingAnalysis ? "Processing..." : analyzing ? "Analyzing…" : "Analyze"}
+                      {processingAnalysis
+                        ? "Processing..."
+                        : analyzing
+                        ? "Analyzing…"
+                        : "Analyze"}
                     </Button>
                   </div>
                 </div>
                 {activeDataset && localDatasets[activeDataset] && (
-                  <div className="border rounded-lg p-4">
+                  <div className="border border-brand-aluminum/60 rounded-lg p-4 bg-white/60 backdrop-blur-sm">
                     <div className="flex flex-wrap items-center gap-2 mb-3">
                       {Object.keys(localDatasets[activeDataset].sheets).map(
                         (sheet) => (
                           <button
                             key={sheet}
                             onClick={() => setActiveSheet(sheet)}
-                            className={`px-3 py-1.5 rounded-md text-xs font-medium border ${
+                            className={`px-3 py-1.5 rounded-md text-xs font-medium border shadow-sm transition ${
                               activeSheet === sheet
-                                ? "bg-brand-emerald text-white border-brand-emerald"
-                                : "bg-white hover:bg-gray-50"
+                                ? "bg-brand-copper text-white border-brand-copper"
+                                : "bg-white/80 hover:bg-white border-brand-aluminum/60 text-brand-charcoal"
                             }`}
                           >
                             {sheet}
@@ -457,9 +466,11 @@ export default function UploadPage() {
                 )}
                 {activeDataset &&
                   remoteDatasets.find((d) => d.id === activeDataset) && (
-                    <div className="border rounded-lg p-4 text-xs text-gray-500 space-y-2">
-                      <p className="font-medium">Stored Dataset</p>
-                      <pre className="bg-gray-50 p-2 rounded max-h-48 overflow-auto">
+                    <div className="border border-brand-aluminum/60 rounded-lg p-4 text-xs text-brand-steel/70 space-y-2 bg-white/60 backdrop-blur-sm">
+                      <p className="font-medium text-brand-charcoal/80">
+                        Stored Dataset
+                      </p>
+                      <pre className="bg-brand-soft/80 p-2 rounded max-h-48 overflow-auto text-[11px]">
                         {JSON.stringify(
                           remoteDatasets.find((d) => d.id === activeDataset)
                             ?.payload || {},
@@ -467,94 +478,134 @@ export default function UploadPage() {
                           2
                         )}
                       </pre>
-                      <p className="text-[10px] text-gray-400">
+                      <p className="text-[10px] text-brand-steel/50">
                         (Original sheets snapshot preserved in Firestore)
                       </p>
                     </div>
                   )}
                 {statusMsg && (
-                  <p className="text-xs text-brand-emerald">{statusMsg}</p>
+                  <p className="text-xs text-brand-copper font-medium animate-pulse">
+                    {statusMsg}
+                  </p>
                 )}
               </div>
             )}
           </Card>
           {(processingAnalysis || analyzing) && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/70 backdrop-blur-sm">
-              <div className="bg-white border rounded-lg p-8 shadow-xl flex flex-col items-center gap-6 w-[380px]">
-                <div className="animate-spin h-10 w-10 rounded-full border-4 border-brand-emerald border-t-transparent" />
-                
+              <div className="bg-white/80 border border-brand-copper/30 rounded-lg p-8 shadow-xl flex flex-col items-center gap-6 w-[380px]">
+                <div className="animate-spin h-10 w-10 rounded-full border-4 border-brand-copper border-t-transparent" />
+
                 {processingAnalysis && (
                   <>
                     <div className="text-center space-y-3">
-                      <h3 className="text-lg font-semibold text-gray-800">
+                      <h3 className="text-lg font-semibold text-brand-charcoal">
                         {currentAgent}
                       </h3>
-                      <p className="text-sm text-gray-600">
+                      <p className="text-sm text-brand-steel/70">
                         Processing your data through our AI agents...
                       </p>
                     </div>
-                    
+
                     {/* Progress indicators */}
                     <div className="flex items-center gap-4 w-full">
-                      <div className={`flex flex-col items-center gap-2 flex-1 transition-all duration-500 ${
-                        agentStep >= 1 ? 'text-brand-emerald' : 'text-gray-400'
-                      }`}>
-                        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold transition-all duration-500 ${
-                          agentStep >= 1 
-                            ? 'border-brand-emerald bg-brand-emerald text-white' 
-                            : 'border-gray-300 text-gray-400'
-                        }`}>
+                      <div
+                        className={`flex flex-col items-center gap-2 flex-1 transition-all duration-500 ${
+                          agentStep >= 1
+                            ? "text-brand-copper"
+                            : "text-brand-steel/50"
+                        }`}
+                      >
+                        <div
+                          className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold transition-all duration-500 ${
+                            agentStep >= 1
+                              ? "border-brand-copper bg-brand-copper text-white shadow"
+                              : "border-brand-aluminum/70 text-brand-steel/60 bg-white"
+                          }`}
+                        >
                           1
                         </div>
-                        <span className="text-xs text-center leading-tight">Data<br/>Ingestion</span>
+                        <span className="text-xs text-center leading-tight">
+                          Data
+                          <br />
+                          Ingestion
+                        </span>
                       </div>
-                      
-                      <div className={`h-0.5 flex-1 transition-all duration-500 ${
-                        agentStep >= 2 ? 'bg-brand-emerald' : 'bg-gray-300'
-                      }`} />
-                      
-                      <div className={`flex flex-col items-center gap-2 flex-1 transition-all duration-500 ${
-                        agentStep >= 2 ? 'text-brand-emerald' : 'text-gray-400'
-                      }`}>
-                        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold transition-all duration-500 ${
-                          agentStep >= 2 
-                            ? 'border-brand-emerald bg-brand-emerald text-white' 
-                            : 'border-gray-300 text-gray-400'
-                        }`}>
+
+                      <div
+                        className={`h-0.5 flex-1 transition-all duration-500 ${
+                          agentStep >= 2
+                            ? "bg-gradient-to-r from-brand-copper via-brand-gold to-brand-steel"
+                            : "bg-brand-aluminum/60"
+                        }`}
+                      />
+
+                      <div
+                        className={`flex flex-col items-center gap-2 flex-1 transition-all duration-500 ${
+                          agentStep >= 2
+                            ? "text-brand-copper"
+                            : "text-brand-steel/50"
+                        }`}
+                      >
+                        <div
+                          className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold transition-all duration-500 ${
+                            agentStep >= 2
+                              ? "border-brand-copper bg-brand-copper text-white shadow"
+                              : "border-brand-aluminum/70 text-brand-steel/60 bg-white"
+                          }`}
+                        >
                           2
                         </div>
-                        <span className="text-xs text-center leading-tight">LCA<br/>Analysis</span>
+                        <span className="text-xs text-center leading-tight">
+                          LCA
+                          <br />
+                          Analysis
+                        </span>
                       </div>
-                      
-                      <div className={`h-0.5 flex-1 transition-all duration-500 ${
-                        agentStep >= 3 ? 'bg-brand-emerald' : 'bg-gray-300'
-                      }`} />
-                      
-                      <div className={`flex flex-col items-center gap-2 flex-1 transition-all duration-500 ${
-                        agentStep >= 3 ? 'text-brand-emerald' : 'text-gray-400'
-                      }`}>
-                        <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold transition-all duration-500 ${
-                          agentStep >= 3 
-                            ? 'border-brand-emerald bg-brand-emerald text-white' 
-                            : 'border-gray-300 text-gray-400'
-                        }`}>
+
+                      <div
+                        className={`h-0.5 flex-1 transition-all duration-500 ${
+                          agentStep >= 3
+                            ? "bg-gradient-to-r from-brand-copper via-brand-gold to-brand-steel"
+                            : "bg-brand-aluminum/60"
+                        }`}
+                      />
+
+                      <div
+                        className={`flex flex-col items-center gap-2 flex-1 transition-all duration-500 ${
+                          agentStep >= 3
+                            ? "text-brand-copper"
+                            : "text-brand-steel/50"
+                        }`}
+                      >
+                        <div
+                          className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold transition-all duration-500 ${
+                            agentStep >= 3
+                              ? "border-brand-copper bg-brand-copper text-white shadow"
+                              : "border-brand-aluminum/70 text-brand-steel/60 bg-white"
+                          }`}
+                        >
                           3
                         </div>
-                        <span className="text-xs text-center leading-tight">Compliance<br/>Check</span>
+                        <span className="text-xs text-center leading-tight">
+                          Compliance
+                          <br />
+                          Check
+                        </span>
                       </div>
                     </div>
                   </>
                 )}
-                
+
                 {analyzing && !processingAnalysis && (
-                  <p className="text-sm text-gray-600 text-center">
+                  <p className="text-sm text-brand-steel/70 text-center">
                     Running analysis…
                   </p>
                 )}
               </div>
             </div>
           )}
-          <Card className="p-4 bg-brand-sky/40 border-brand-sky text-xs text-brand-forest">
+          <Card className="p-4 bg-white/60 backdrop-blur-sm border border-brand-copper/25 text-xs text-brand-steel/80">
             Tip: Add multiple datasets to represent different parts of your
             system (e.g., energy vs process vs logistics). They will be merged
             logically in later analysis steps.

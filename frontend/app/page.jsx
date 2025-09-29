@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import {
   ArrowRight,
@@ -89,10 +91,10 @@ export default function Home() {
   return (
     <>
       <PageHero
-        title="AI-Assisted Life Cycle Assessment for Aluminium, Copper & Critical Minerals"
+        title="AI LCA for Metals"
         description="India's first comprehensive LCA platform with AI-powered gap filling, compliance-ready reporting, and circularity insights for the metals industry."
-        splineScene="https://prod.spline.design/tg7iWojIzOzWx1bc/scene.splinecode"
-        dense={false}
+        splineScene="https://prod.spline.design/PzyHPdD607e7wQyA/scene.splinecode"
+        spacing="home"
       >
         <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
           <Link href="/projects/new">
@@ -109,25 +111,30 @@ export default function Home() {
         </div>
       </PageHero>
 
-      <Section>
+      <Section className="bg-[#ffffff]">
         <div className="text-center mb-16">
-          <h2 className="mb-6">Why DhatuChakr?</h2>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
-            Built specifically for India's metals industry with localized data,
-            AI-powered analysis, and compliance-ready outputs that meet
-            international standards.
+          <h2 className="mb-6 text-brand-charcoal tracking-tight">
+            Why DhatuChakr?
+          </h2>
+          <p className="text-lg md:text-xl text-brand-charcoal/80 max-w-3xl mx-auto leading-relaxed">
+            Built for India's metals ecosystem with localized datasets,
+            AI-driven gap filling and compliance-first outputs.
           </p>
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
           {usps.map((usp, index) => (
             <Card
               key={index}
-              className="text-center hover:scale-105 transition-transform"
+              className="text-center bg-white/80 backdrop-blur-sm border border-brand-copper/20 hover:shadow-lg hover:border-brand-copper/40 transition-all"
             >
-              <FeatureIcon icon={usp.icon} className="mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-3">{usp.title}</h3>
-              <p className="text-gray-600 text-sm leading-relaxed">
+              <FeatureIcon
+                icon={usp.icon}
+                className="mx-auto mb-4 text-brand-copper"
+              />
+              <h3 className="text-base font-semibold mb-2 text-brand-charcoal">
+                {usp.title}
+              </h3>
+              <p className="text-brand-charcoal/70 text-sm leading-relaxed">
                 {usp.description}
               </p>
             </Card>
@@ -135,14 +142,15 @@ export default function Home() {
         </div>
       </Section>
 
-      <Section background="gray">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+      <Section className="bg-[#FFF0E3]">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
           <div>
-            <h2 className="mb-6">Complete LCA Lifecycle Coverage</h2>
-            <p className="text-gray-600 mb-8 leading-relaxed">
-              From mining to casting, our platform covers the entire value chain
-              with detailed process modeling and impact assessment at each
-              stage.
+            <h2 className="mb-6 text-brand-charcoal">
+              Complete LCA Lifecycle Coverage
+            </h2>
+            <p className="text-brand-charcoal/80 mb-8 leading-relaxed">
+              From mining to casting, model every process stage with verifiable
+              data, localized factors and AI-backed estimations.
             </p>
 
             <div className="space-y-4">
@@ -154,16 +162,18 @@ export default function Home() {
                 "Transport & Logistics",
               ].map((stage, index) => (
                 <div key={index} className="flex items-center space-x-3">
-                  <div className="w-2 h-2 bg-brand-emerald rounded-full"></div>
-                  <span className="text-gray-700">{stage}</span>
+                  <div className="w-2 h-2 rounded-full bg-brand-copper/70 ring-2 ring-brand-copper/20"></div>
+                  <span className="text-brand-charcoal/80">{stage}</span>
                 </div>
               ))}
             </div>
           </div>
-
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             {metals.map((metal, index) => (
-              <Card key={index} className="text-center">
+              <Card
+                key={index}
+                className="text-center bg-white/80 border border-brand-copper/20 backdrop-blur-sm"
+              >
                 <div
                   className={`w-16 h-16 rounded-full bg-${metal.color}/20 flex items-center justify-center mx-auto mb-4`}
                 >
@@ -178,58 +188,59 @@ export default function Home() {
                   </span>
                 </div>
                 <h3 className="font-semibold mb-2">{metal.name}</h3>
-                <p className="text-sm text-gray-600">{metal.description}</p>
+                <p className="text-sm text-brand-charcoal/70">
+                  {metal.description}
+                </p>
               </Card>
             ))}
           </div>
         </div>
       </Section>
 
-      <Section>
+      <Section className="bg-[#ffffff]">
         <div className="text-center mb-16">
-          <h2 className="mb-6">India-First Database</h2>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
-            All defaults calibrated for Indian conditions - electricity grid
-            mix, transport patterns, and recycling infrastructure - but fully
-            customizable for your specific operations.
+          <h2 className="mb-6 text-brand-charcoal">India-First Database</h2>
+          <p className="text-lg md:text-xl text-brand-charcoal/80 max-w-3xl mx-auto leading-relaxed">
+            Defaults calibrated for Indian energy mix, transport logistics and
+            recycling flows—fully overridable for site-specific reality.
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          <Card className="text-center">
+          <Card className="text-center bg-white/80 border border-brand-copper/20 backdrop-blur-sm">
             <FeatureIcon
               icon={Zap}
               color="accent-sun"
               className="mx-auto mb-4"
             />
             <h3 className="text-lg font-semibold mb-3">Grid Electricity</h3>
-            <p className="text-gray-600 text-sm">
+            <p className="text-brand-charcoal/70 text-sm">
               State-wise grid factors with renewable energy integration
               scenarios
             </p>
           </Card>
 
-          <Card className="text-center">
+          <Card className="text-center bg-white/80 border border-brand-copper/20 backdrop-blur-sm">
             <FeatureIcon
               icon={Database}
               color="brand-copper"
               className="mx-auto mb-4"
             />
             <h3 className="text-lg font-semibold mb-3">Transport Networks</h3>
-            <p className="text-gray-600 text-sm">
+            <p className="text-brand-charcoal/70 text-sm">
               Road vs rail optimization with Indian logistics cost and emission
               factors
             </p>
           </Card>
 
-          <Card className="text-center">
+          <Card className="text-center bg-white/80 border border-brand-copper/20 backdrop-blur-sm">
             <FeatureIcon
               icon={Recycle}
-              color="brand-emerald"
+              color="brand-copper"
               className="mx-auto mb-4"
             />
             <h3 className="text-lg font-semibold mb-3">Scrap & Recycling</h3>
-            <p className="text-gray-600 text-sm">
+            <p className="text-brand-charcoal/70 text-sm">
               Domestic scrap availability, collection rates, and processing
               efficiency
             </p>
@@ -237,25 +248,29 @@ export default function Home() {
         </div>
       </Section>
 
-      <Section background="gray">
+      <Section className="bg-[#FFF0E3]">
         <div className="text-center mb-16">
-          <h2 className="mb-6">Powerful Features</h2>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
-            From data upload to final reporting, every step is designed for
-            efficiency and accuracy.
+          <h2 className="mb-6 text-brand-charcoal">Powerful Features</h2>
+          <p className="text-lg md:text-xl text-brand-charcoal/80 max-w-3xl mx-auto leading-relaxed">
+            From data upload to reporting—designed for speed, transparency and
+            compliance.
           </p>
         </div>
-
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {features.map((feature, index) => (
-            <Card key={index} className="text-center">
+            <Card
+              key={index}
+              className="text-center bg-white/80 border border-brand-copper/20 backdrop-blur-sm"
+            >
               <FeatureIcon
                 icon={feature.icon}
                 size="lg"
-                className="mx-auto mb-6"
+                className="mx-auto mb-6 text-brand-copper"
               />
-              <h3 className="text-xl font-semibold mb-4">{feature.title}</h3>
-              <p className="text-gray-600 leading-relaxed">
+              <h3 className="text-lg font-semibold mb-3 text-brand-charcoal">
+                {feature.title}
+              </h3>
+              <p className="text-sm text-brand-charcoal/70 leading-relaxed">
                 {feature.description}
               </p>
             </Card>
@@ -263,32 +278,14 @@ export default function Home() {
         </div>
       </Section>
 
-      <Section>
-        <div className="text-center mb-16">
-          <h2 className="mb-6">Trusted by Industry Leaders</h2>
-          <p className="text-gray-600 mb-8">
-            Join companies across the metals value chain using DhatuChakr for
-            compliance and sustainability reporting
-          </p>
+      {/* Trusted by Industry section removed as requested */}
 
-          {/* Placeholder logos */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 items-center opacity-60">
-            {[1, 2, 3, 4].map((i) => (
-              <div
-                key={i}
-                className="h-12 bg-gray-200 rounded-lg flex items-center justify-center"
-              >
-                <span className="text-gray-400 text-sm">Partner {i}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Section>
-
-      <Section background="gradient" className="text-center">
-        <h2 className="mb-6">Ready to Start Your LCA Analysis?</h2>
-        <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto leading-relaxed">
-          Join the sustainable metals revolution with AI-powered insights and
+      <Section className="text-center bg-[#ffffff]">
+        <h2 className="mb-6 text-brand-charcoal">
+          Ready to Start Your LCA Analysis?
+        </h2>
+        <p className="text-lg md:text-xl text-brand-charcoal/80 mb-8 max-w-2xl mx-auto leading-relaxed">
+          Join the sustainable metals transition with AI insights and
           India-first data.
         </p>
         <Link href="/projects/new">

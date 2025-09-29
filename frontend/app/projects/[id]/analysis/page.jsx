@@ -391,25 +391,25 @@ export default function AnalysisPage() {
     setRunningMonteCarlo(true);
     try {
       // Simulate 10-second processing time
-      await new Promise(resolve => setTimeout(resolve, 10000));
-      
+      await new Promise((resolve) => setTimeout(resolve, 10000));
+
       // Generate year-to-year waterfall simulation like the reference
       const iterations = 2000; // Exactly 2000 iterations as requested
       const years = 11; // Y0 to Y10
       const volatility = 3; // 3% volatility
       const reductionRate = 3; // 3% reduction per year
-      
+
       // Run Monte Carlo simulation
       const yearlyResults = [];
       for (let i = 0; i < years; i++) {
         yearlyResults.push([]);
       }
-      
+
       // Run iterations
       for (let iter = 0; iter < iterations; iter++) {
         let currentValue = 100; // Starting at 100 kg CO2-eq
         yearlyResults[0].push(currentValue);
-        
+
         for (let year = 1; year < years; year++) {
           // Apply reduction with random noise
           const randomNoise = (Math.random() - 0.5) * 2 * volatility;
@@ -418,20 +418,20 @@ export default function AnalysisPage() {
           yearlyResults[year].push(currentValue);
         }
       }
-      
+
       // Define professional colors - blue to green gradient
       const colors = [
-        '#1E40AF', // Start - Deep Blue
-        '#2563EB', // Y0→Y1 - Blue
-        '#3B82F6', // Y1→Y2 - Medium Blue
-        '#60A5FA', // Y2→Y3 - Light Blue
-        '#0891B2', // Y3→Y4 - Cyan Blue
-        '#0D9488', // Y4→Y5 - Teal
-        '#059669', // Y5→Y6 - Emerald
-        '#16A34A', // Y6→Y7 - Green
-        '#22C55E', // Y7→Y8 - Light Green
-        '#4ADE80', // Y8→Y9 - Bright Green
-        '#10B981'  // Y9→Y10 - Final Emerald
+        "#1E40AF", // Start - Deep Blue
+        "#2563EB", // Y0→Y1 - Blue
+        "#3B82F6", // Y1→Y2 - Medium Blue
+        "#60A5FA", // Y2→Y3 - Light Blue
+        "#0891B2", // Y3→Y4 - Cyan Blue
+        "#0D9488", // Y4→Y5 - Teal
+        "#059669", // Y5→Y6 - Emerald
+        "#16A34A", // Y6→Y7 - Green
+        "#22C55E", // Y7→Y8 - Light Green
+        "#4ADE80", // Y8→Y9 - Bright Green
+        "#10B981", // Y9→Y10 - Final Emerald
       ];
 
       // Calculate statistics for each year
@@ -442,23 +442,25 @@ export default function AnalysisPage() {
         const median = values[Math.floor(values.length / 2)];
         const lower95 = values[Math.floor(values.length * 0.025)];
         const upper95 = values[Math.floor(values.length * 0.975)];
-        
+
         waterfallData.push({
-          name: year === 0 ? 'Start' : `Y${year-1}→Y${year}`,
+          name: year === 0 ? "Start" : `Y${year - 1}→Y${year}`,
           value: mean,
           year: year,
           median: median,
           lower95: lower95,
           upper95: upper95,
-          type: year === 0 ? 'base' : year === years - 1 ? 'final' : 'transition',
-          fill: colors[year] || '#3B82F6' // Add color directly to data
+          type:
+            year === 0 ? "base" : year === years - 1 ? "final" : "transition",
+          fill: colors[year] || "#3B82F6", // Add color directly to data
         });
       }
-      
+
       const finalYear = waterfallData[waterfallData.length - 1];
       const startYear = waterfallData[0];
-      const totalReduction = ((startYear.value - finalYear.value) / startYear.value * 100);
-      
+      const totalReduction =
+        ((startYear.value - finalYear.value) / startYear.value) * 100;
+
       const simulatedResults = {
         iterations: iterations,
         confidenceInterval: 95,
@@ -467,13 +469,15 @@ export default function AnalysisPage() {
           totalReduction: totalReduction,
           finalMean: finalYear.value,
           finalMedian: finalYear.median,
-          confidenceRange: `[${finalYear.lower95.toFixed(1)}, ${finalYear.upper95.toFixed(1)}]`,
+          confidenceRange: `[${finalYear.lower95.toFixed(
+            1
+          )}, ${finalYear.upper95.toFixed(1)}]`,
           startValue: startYear.value,
           volatility: volatility,
-          reductionRate: reductionRate
-        }
+          reductionRate: reductionRate,
+        },
       };
-      
+
       setMonteCarloResults(simulatedResults);
     } catch (error) {
       console.error("Monte Carlo simulation failed:", error);
@@ -493,6 +497,7 @@ export default function AnalysisPage() {
               })`
             : "Computed environmental performance"
         }
+        spacing="standard"
       />
       <Section>
         <div className="grid md:grid-cols-4 gap-6 mb-12">
@@ -531,45 +536,81 @@ export default function AnalysisPage() {
           </div>
           <div className="space-y-3">
             <div className="flex items-center justify-between p-3 bg-red-50 border border-red-200 rounded-lg">
-              <span className="text-sm font-medium text-gray-800">1. Use renewable energy like solar and wind instead of coal for smelting</span>
-              <span className="text-sm font-bold text-red-600">43% reduction</span>
+              <span className="text-sm font-medium text-gray-800">
+                1. Use renewable energy like solar and wind instead of coal for
+                smelting
+              </span>
+              <span className="text-sm font-bold text-red-600">
+                43% reduction
+              </span>
             </div>
             <div className="flex items-center justify-between p-3 bg-orange-50 border border-orange-200 rounded-lg">
-              <span className="text-sm font-medium text-gray-800">2. Improve recycling systems to reuse more materials continuously</span>
-              <span className="text-sm font-bold text-orange-600">40% reduction</span>
+              <span className="text-sm font-medium text-gray-800">
+                2. Improve recycling systems to reuse more materials
+                continuously
+              </span>
+              <span className="text-sm font-bold text-orange-600">
+                40% reduction
+              </span>
             </div>
             <div className="flex items-center justify-between p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <span className="text-sm font-medium text-gray-800">3. Use trains and electric vehicles instead of diesel trucks for transportation</span>
-              <span className="text-sm font-bold text-yellow-600">62% reduction</span>
+              <span className="text-sm font-medium text-gray-800">
+                3. Use trains and electric vehicles instead of diesel trucks for
+                transportation
+              </span>
+              <span className="text-sm font-bold text-yellow-600">
+                62% reduction
+              </span>
             </div>
             <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <span className="text-sm font-medium text-gray-800">4. Replace coal-powered heating with renewable energy sources</span>
-              <span className="text-sm font-bold text-blue-600">33% reduction</span>
+              <span className="text-sm font-medium text-gray-800">
+                4. Replace coal-powered heating with renewable energy sources
+              </span>
+              <span className="text-sm font-bold text-blue-600">
+                33% reduction
+              </span>
             </div>
             <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
-              <span className="text-sm font-medium text-gray-800">5. Design products to last longer and be reusable instead of single-use</span>
-              <span className="text-sm font-bold text-green-600">33% reduction</span>
+              <span className="text-sm font-medium text-gray-800">
+                5. Design products to last longer and be reusable instead of
+                single-use
+              </span>
+              <span className="text-sm font-bold text-green-600">
+                33% reduction
+              </span>
             </div>
             <div className="flex items-center justify-between p-3 bg-purple-50 border border-purple-200 rounded-lg">
-              <span className="text-sm font-medium text-gray-800">6. Upgrade to more energy-efficient furnaces and equipment</span>
-              <span className="text-sm font-bold text-purple-600">30% reduction</span>
+              <span className="text-sm font-medium text-gray-800">
+                6. Upgrade to more energy-efficient furnaces and equipment
+              </span>
+              <span className="text-sm font-bold text-purple-600">
+                30% reduction
+              </span>
             </div>
             <div className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg">
-              <span className="text-sm font-medium text-gray-800">7. Replace diesel-powered mining trucks with electric vehicles</span>
-              <span className="text-sm font-bold text-gray-600">20% reduction</span>
+              <span className="text-sm font-medium text-gray-800">
+                7. Replace diesel-powered mining trucks with electric vehicles
+              </span>
+              <span className="text-sm font-bold text-gray-600">
+                20% reduction
+              </span>
             </div>
           </div>
 
           {/* Before vs After Combined Chart */}
           <div className="mt-6">
             <h4 className="text-lg font-semibold mb-4">Sustainability Graph</h4>
-            <div className="bg-white border rounded p-4 flex justify-center items-center" style={{ minHeight: '400px' }}>
+            <div
+              className="bg-white border rounded p-4 flex justify-center items-center"
+              style={{ minHeight: "400px" }}
+            >
               <div className="w-full p-3">
                 <ComprehensiveCarbonChart />
               </div>
             </div>
             <p className="text-sm text-gray-600 mt-2 text-center">
-              Comprehensive lifecycle carbon emissions showing current vs improved scenarios with specific reduction strategies.
+              Comprehensive lifecycle carbon emissions showing current vs
+              improved scenarios with specific reduction strategies.
             </p>
           </div>
 
@@ -755,7 +796,9 @@ export default function AnalysisPage() {
         {/* Monte Carlo Simulation */}
         <Card className="p-6 mb-8 space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold">Monte Carlo Uncertainty Analysis</h3>
+            <h3 className="text-lg font-semibold">
+              Monte Carlo Uncertainty Analysis
+            </h3>
             <Button
               onClick={runMonteCarloSimulation}
               disabled={runningMonteCarlo}
@@ -764,43 +807,64 @@ export default function AnalysisPage() {
               {runningMonteCarlo ? "Running Simulation..." : "Run Monte Carlo"}
             </Button>
           </div>
-          
+
           {runningMonteCarlo && (
             <div className="flex items-center justify-center py-12">
               <div className="text-center space-y-4">
                 <div className="animate-spin h-10 w-10 rounded-full border-4 border-brand-emerald border-t-transparent mx-auto" />
-                <p className="text-sm text-gray-600">Running 2000 iterations...</p>
-                <p className="text-xs text-gray-500">Analyzing uncertainty in carbon footprint calculations</p>
+                <p className="text-sm text-gray-600">
+                  Running 2000 iterations...
+                </p>
+                <p className="text-xs text-gray-500">
+                  Analyzing uncertainty in carbon footprint calculations
+                </p>
               </div>
             </div>
           )}
-          
+
           {monteCarloResults && !runningMonteCarlo && (
             <div className="space-y-6">
               {/* Statistics Summary */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-lg text-center">
-                  <div className="text-xs text-blue-600 uppercase tracking-wide font-semibold mb-2">Total Reduction</div>
-                  <div className="text-xl font-bold text-blue-800">{monteCarloResults.statistics.totalReduction.toFixed(1)}%</div>
+                  <div className="text-xs text-blue-600 uppercase tracking-wide font-semibold mb-2">
+                    Total Reduction
+                  </div>
+                  <div className="text-xl font-bold text-blue-800">
+                    {monteCarloResults.statistics.totalReduction.toFixed(1)}%
+                  </div>
                 </div>
                 <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg text-center">
-                  <div className="text-xs text-green-600 uppercase tracking-wide font-semibold mb-2">Final Year Mean</div>
-                  <div className="text-xl font-bold text-green-800">{monteCarloResults.statistics.finalMean.toFixed(1)} kg</div>
+                  <div className="text-xs text-green-600 uppercase tracking-wide font-semibold mb-2">
+                    Final Year Mean
+                  </div>
+                  <div className="text-xl font-bold text-green-800">
+                    {monteCarloResults.statistics.finalMean.toFixed(1)} kg
+                  </div>
                 </div>
                 <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-lg text-center">
-                  <div className="text-xs text-purple-600 uppercase tracking-wide font-semibold mb-2">95% Confidence</div>
-                  <div className="text-sm font-bold text-purple-800">{monteCarloResults.statistics.confidenceRange}</div>
+                  <div className="text-xs text-purple-600 uppercase tracking-wide font-semibold mb-2">
+                    95% Confidence
+                  </div>
+                  <div className="text-sm font-bold text-purple-800">
+                    {monteCarloResults.statistics.confidenceRange}
+                  </div>
                 </div>
                 <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-lg text-center">
-                  <div className="text-xs text-orange-600 uppercase tracking-wide font-semibold mb-2">Iterations</div>
-                  <div className="text-xl font-bold text-orange-800">{monteCarloResults.iterations.toLocaleString()}</div>
+                  <div className="text-xs text-orange-600 uppercase tracking-wide font-semibold mb-2">
+                    Iterations
+                  </div>
+                  <div className="text-xl font-bold text-orange-800">
+                    {monteCarloResults.iterations.toLocaleString()}
+                  </div>
                 </div>
               </div>
-              
+
               {/* Waterfall Chart */}
               <div className="space-y-3">
                 <h4 className="text-lg font-semibold text-center text-gray-800">
-                  🌍 Waterfall of Mean CO₂-eq after Monte Carlo LCA (Year-to-year changes)
+                  🌍 Waterfall of Mean CO₂-eq after Monte Carlo LCA
+                  (Year-to-year changes)
                 </h4>
                 <p className="text-center text-sm text-gray-600 mb-4">
                   ({monteCarloResults.iterations.toLocaleString()} iterations)
@@ -812,55 +876,58 @@ export default function AnalysisPage() {
                       margin={{ top: 30, right: 30, left: 20, bottom: 60 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                      <XAxis 
-                        dataKey="name" 
+                      <XAxis
+                        dataKey="name"
                         angle={-45}
                         textAnchor="end"
                         height={80}
                         fontSize={11}
                         fontWeight="bold"
                       />
-                      <YAxis 
+                      <YAxis
                         domain={[70, 105]}
-                        label={{ 
-                          value: 'Mean CO₂-equivalent (kg CO₂-eq)', 
-                          angle: -90, 
-                          position: 'insideLeft',
-                          style: { textAnchor: 'middle', fontSize: '12px', fontWeight: 'bold' }
+                        label={{
+                          value: "Mean CO₂-equivalent (kg CO₂-eq)",
+                          angle: -90,
+                          position: "insideLeft",
+                          style: {
+                            textAnchor: "middle",
+                            fontSize: "12px",
+                            fontWeight: "bold",
+                          },
                         }}
                         fontSize={11}
                       />
                       <Tooltip
                         contentStyle={{
-                          backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                          border: '2px solid #e0e0e0',
-                          borderRadius: '8px',
-                          boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                          backgroundColor: "rgba(255, 255, 255, 0.95)",
+                          border: "2px solid #e0e0e0",
+                          borderRadius: "8px",
+                          boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
                         }}
                         formatter={(value, name, props) => {
                           const data = props.payload;
                           return [
                             `Mean: ${data.value.toFixed(1)} kg`,
                             `Median: ${data.median.toFixed(1)} kg`,
-                            `95% CI: [${data.lower95.toFixed(1)}, ${data.upper95.toFixed(1)}]`
+                            `95% CI: [${data.lower95.toFixed(
+                              1
+                            )}, ${data.upper95.toFixed(1)}]`,
                           ];
                         }}
                         labelFormatter={(label) => `Year Transition: ${label}`}
                       />
-                      <Bar 
-                        dataKey="value" 
+                      <Bar
+                        dataKey="value"
                         name="Mean CO₂-eq"
                         radius={[4, 4, 0, 0]}
                       >
                         {monteCarloResults.waterfallData.map((entry, index) => (
-                          <Bar 
-                            key={`bar-${index}`}
-                            fill={entry.fill}
-                          />
+                          <Bar key={`bar-${index}`} fill={entry.fill} />
                         ))}
-                        <LabelList 
-                          dataKey="value" 
-                          position="top" 
+                        <LabelList
+                          dataKey="value"
+                          position="top"
                           fontSize={10}
                           fontWeight="bold"
                           formatter={(value) => value.toFixed(1)}
@@ -870,20 +937,28 @@ export default function AnalysisPage() {
                   </ResponsiveContainer>
                 </div>
                 <p className="text-xs text-gray-500 text-center mt-3">
-                  Monte Carlo simulation showing year-over-year CO₂ reduction with {monteCarloResults.statistics.volatility}% volatility and {monteCarloResults.statistics.reductionRate}% annual reduction rate
+                  Monte Carlo simulation showing year-over-year CO₂ reduction
+                  with {monteCarloResults.statistics.volatility}% volatility and{" "}
+                  {monteCarloResults.statistics.reductionRate}% annual reduction
+                  rate
                 </p>
               </div>
             </div>
           )}
-          
+
           {!monteCarloResults && !runningMonteCarlo && (
             <div className="text-center py-8 text-gray-500">
-              <p className="text-sm">Click "Run Monte Carlo" to perform uncertainty analysis</p>
-              <p className="text-xs mt-1">Simulates 2000 iterations to quantify result confidence intervals</p>
+              <p className="text-sm">
+                Click "Run Monte Carlo" to perform uncertainty analysis
+              </p>
+              <p className="text-xs mt-1">
+                Simulates 2000 iterations to quantify result confidence
+                intervals
+              </p>
             </div>
           )}
         </Card>
-        
+
         {/* Materials Table */}
         {materialsInfo.length > 0 && (
           <Card className="p-6 mb-12 space-y-4">
@@ -940,49 +1015,42 @@ const comprehensiveCarbonData = [
     current: 500,
     improved: 400,
     strategy: "Diesel → Electric trucks / EV fleet",
-    
   },
   {
     name: "Alumina Refining",
     current: 1200,
     improved: 800,
     strategy: "Coal boilers → Renewable heat",
-    
   },
   {
     name: "Smelting",
     current: 7000,
     improved: 4000,
     strategy: "Grid coal → Hydro/solar/wind",
-    
   },
   {
     name: "Casting/Forming",
     current: 1000,
     improved: 700,
     strategy: "Ineff. furnaces → Efficient furnaces",
-    
   },
   {
     name: "Transportation",
     current: 800,
     improved: 300,
     strategy: "Road trucks → Rail / E-fleet",
-    
   },
   {
     name: "Product Use",
     current: 300,
     improved: 200,
     strategy: "Single-use → Durable & design for recycling",
-    
   },
   {
     name: "Recycling",
     current: 500,
     improved: 300,
     strategy: "Low recycling → Closed-loop recycling",
-    
   },
 ];
 
@@ -1013,14 +1081,7 @@ const renderTickWithStrategy = ({ x, y, payload, index }) => {
   // primary tick label (category) + strategy lines (multiline, with arrows)
   return (
     <g transform={`translate(${x},${y})`}>
-      <text
-        x={0}
-        y={0}
-        dy={0}
-        textAnchor="middle"
-        fontSize={11}
-        fill="#333"
-      >
+      <text x={0} y={0} dy={0} textAnchor="middle" fontSize={11} fill="#333">
         {payload.value}
       </text>
 
@@ -1065,7 +1126,10 @@ function ComprehensiveCarbonChart() {
           }}
         />
         <Tooltip
-          formatter={(value, name) => [`${value} kg CO₂/ton`, name === "current" ? "Current" : "Improved"]}
+          formatter={(value, name) => [
+            `${value} kg CO₂/ton`,
+            name === "current" ? "Current" : "Improved",
+          ]}
           labelFormatter={(label) => `Stage: ${label}`}
           contentStyle={{
             backgroundColor: "#fff",

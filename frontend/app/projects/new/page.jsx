@@ -81,6 +81,7 @@ export default function NewProjectPage() {
       <PageHero
         title="Create New LCA Analysis"
         description="Set up your project parameters and begin comprehensive life cycle assessment"
+        spacing="standard"
       />
 
       <Section>

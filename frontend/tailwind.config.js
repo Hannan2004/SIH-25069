@@ -12,15 +12,16 @@ module.exports = {
         inter: ["Inter", "sans-serif"],
       },
       colors: {
-        // Core sustainability + metal palette
-        "brand-copper": "#B87333", // Copper Orange (Primary)
-        "brand-steel": "#7A7A7A", // Steel Gray
-        "brand-aluminum": "#C0C0C0", // Aluminium Silver
-        "brand-blue": "#59391c", // Mineral Blue (navbar/footer)
-        "brand-green": "#3FA34D", // Eco Green (secondary actions)
-        "brand-charcoal": "#1A1A1A", // Headings / high contrast
-        "brand-soft": "#F9FAFB", // Soft White backgrounds
-        "brand-gold": "#DAA520", // Golden highlight for KPIs
+        // Core sustainability + metal palette (updated brown-centric scheme)
+        // Adjusted to warmer tones for cohesive brand look; keys retained for backwards compatibility.
+        "brand-copper": "#A95E2F", // Primary Copper (slightly deeper for contrast)
+        "brand-steel": "#6B625B", // Warm steel / muted brown-gray
+        "brand-aluminum": "#D6D1CC", // Soft warm metal neutral
+        "brand-blue": "#4A2E18", // Deep brown (formerly mineral blue key)
+        "brand-green": "#8C5A32", // Repurposed as supportive accent (legacy key)
+        "brand-charcoal": "#1F1A18", // Slightly warmer charcoal
+        "brand-soft": "#FFF7F1", // Warm soft background
+        "brand-gold": "#C98E3B", // Muted gold for highlights
         // Legacy mappings (kept for backward compatibility in components)
         "brand-emerald": "#3FA34D",
         "brand-forest": "#59391c",

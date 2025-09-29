@@ -118,22 +118,27 @@ export default function DashboardPage() {
               }. Manage your LCA projects.`
             : "Manage your LCA projects."
         }
+        spacing="standard"
       />
       <Section>
         <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
-          <h2 className="text-lg font-semibold text-gray-800">Your Projects</h2>
+          <h2 className="text-lg font-semibold text-brand-charcoal">
+            Your Projects
+          </h2>
           <Link href="/projects/new">
             <Button size="sm">+ Add Project</Button>
           </Link>
         </div>
         {loading && (
-          <Card className="p-8 text-center text-sm text-gray-500">
+          <Card className="p-8 text-center text-sm text-brand-steel/70 bg-white/70 backdrop-blur-sm border border-brand-copper/20">
             Loading projects…
           </Card>
         )}
         {!loading && projectEntries.length === 0 && (
-          <Card className="p-8 text-center space-y-4">
-            <p className="text-gray-600 text-sm">You have no projects yet.</p>
+          <Card className="p-8 text-center space-y-4 bg-white/70 backdrop-blur-sm border border-brand-copper/25">
+            <p className="text-brand-steel/80 text-sm">
+              You have no projects yet.
+            </p>
             <Link href="/projects/new">
               <Button>Create your first project</Button>
             </Link>
@@ -165,28 +170,30 @@ export default function DashboardPage() {
             return (
               <Card
                 key={id}
-                className="p-5 flex flex-col cursor-pointer hover:shadow-md transition"
+                className="p-5 flex flex-col cursor-pointer hover:shadow-lg hover:border-brand-copper/40 transition border border-brand-copper/20 bg-white/70 backdrop-blur-sm"
                 onClick={() => (window.location.href = destination)}
               >
                 <div className="flex items-start justify-between mb-4">
                   <div>
-                    <h3 className="font-semibold text-gray-900">
+                    <h3 className="font-semibold text-brand-charcoal">
                       {project.name || project.title || "Untitled Project"}
                     </h3>
-                    <p className="text-xs text-gray-500 mt-0.5">ID: {id}</p>
+                    <p className="text-xs text-brand-steel/60 mt-0.5">
+                      ID: {id}
+                    </p>
                   </div>
-                  <span className="text-xs text-brand-emerald font-medium">
+                  <span className="text-xs font-medium text-brand-copper">
                     Open →
                   </span>
                 </div>
                 <div className="mb-4">
-                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="h-2 bg-brand-aluminum/40 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-brand-emerald to-brand-forest transition-all"
+                      className="h-full bg-gradient-to-r from-brand-copper via-brand-gold to-brand-steel transition-all"
                       style={{ width: pct + "%" }}
                     />
                   </div>
-                  <p className="mt-1 text-[11px] text-gray-500 tracking-wide">
+                  <p className="mt-1 text-[11px] text-brand-steel/70 tracking-wide">
                     Progress: {pct}%
                   </p>
                 </div>
@@ -195,12 +202,16 @@ export default function DashboardPage() {
                     <li key={s.key} className="flex items-center gap-2">
                       <span
                         className={`inline-block w-2 h-2 rounded-full ${
-                          status[s.key] ? "bg-brand-emerald" : "bg-gray-300"
+                          status[s.key]
+                            ? "bg-brand-copper"
+                            : "bg-brand-aluminum/60"
                         }`}
                       />
                       <span
                         className={
-                          status[s.key] ? "text-gray-700" : "text-gray-400"
+                          status[s.key]
+                            ? "text-brand-charcoal/90"
+                            : "text-brand-steel/50"
                         }
                       >
                         {s.label}
@@ -208,17 +219,17 @@ export default function DashboardPage() {
                     </li>
                   ))}
                 </ul>
-                <div className="mt-auto flex flex-wrap gap-2 items-center text-[11px] text-gray-500">
-                  <span className="px-2 py-0.5 rounded-full bg-gray-100">
+                <div className="mt-auto flex flex-wrap gap-2 items-center text-[11px] text-brand-steel/70">
+                  <span className="px-2 py-0.5 rounded-full bg-brand-aluminum/40 text-brand-charcoal/80">
                     {datasetCount} dataset{datasetCount === 1 ? "" : "s"}
                   </span>
                   {project.analysisCount > 0 && (
-                    <span className="px-2 py-0.5 rounded-full bg-brand-sky/40 text-brand-forest">
+                    <span className="px-2 py-0.5 rounded-full bg-brand-copper/15 text-brand-copper border border-brand-copper/30">
                       Analyzed
                     </span>
                   )}
                   {project.hasReport && (
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-300">
+                    <span className="px-2 py-0.5 rounded-full bg-brand-gold/15 text-brand-gold border border-brand-gold/30">
                       Report
                     </span>
                   )}

@@ -63,7 +63,11 @@ export default function UploadDropzone({ onDataParsed }) {
 
   return (
     <div
-      className={`upload-dropzone ${drag ? "dragover" : ""}`}
+      className={`upload-dropzone relative group ${
+        drag
+          ? "ring-2 ring-brand-copper/50 border-brand-copper/60 bg-brand-soft/80"
+          : "border-brand-aluminum/60 bg-white/60 hover:bg-white"
+      } transition-colors border-2 border-dashed rounded-2xl p-8 cursor-pointer backdrop-blur-sm`}
       onDragOver={(e) => {
         e.preventDefault();
         setDrag(true);
@@ -86,16 +90,23 @@ export default function UploadDropzone({ onDataParsed }) {
         onChange={(e) => handleFiles(e.target.files[0])}
       />
       <div className="flex flex-col items-center space-y-4">
-        <div className="w-16 h-16 bg-white border border-gray-200 rounded-2xl flex items-center justify-center shadow-sm">
-          <UploadCloud className="h-8 w-8 text-brand-emerald" />
+        <div className="w-16 h-16 bg-white/80 border border-brand-aluminum/60 rounded-2xl flex items-center justify-center shadow-sm relative overflow-hidden">
+          <UploadCloud className="h-8 w-8 text-brand-copper transition-transform group-hover:scale-110" />
+          <span className="absolute inset-0 opacity-0 group-hover:opacity-100 bg-radial from-brand-copper/10 to-transparent" />
         </div>
-        <div>
-          <p className="font-medium">Click or drag file to upload</p>
-          <p className="text-sm text-gray-500 mt-1">
+        <div className="text-center">
+          <p className="font-medium text-brand-charcoal">
+            Click or drag file to upload
+          </p>
+          <p className="text-sm text-brand-steel/60 mt-1">
             Accepted formats: XLSX, CSV
           </p>
         </div>
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && (
+          <p className="text-sm text-red-600 bg-red-50/80 border border-red-200/70 px-3 py-1.5 rounded-md">
+            {error}
+          </p>
+        )}
       </div>
     </div>
   );
