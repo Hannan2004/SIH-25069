@@ -6,6 +6,7 @@ import Card from "@/components/Card";
 import Button from "@/components/Button";
 import Stat from "@/components/Stat";
 import Loader from "@/components/Loader";
+import EmissionsSankeyChart from "@/components/EmissionsSankeyChart";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import {
@@ -46,18 +47,6 @@ export default function AnalysisPage() {
   const [generatingReport, setGeneratingReport] = useState(false);
   const [runningMonteCarlo, setRunningMonteCarlo] = useState(false);
   const [monteCarloResults, setMonteCarloResults] = useState(null);
-
-  // Lazy-load Sankey (client only) if needed later; fallback simple box if fails
-  const SankeyChart = useMemo(
-    () =>
-      dynamic(() => import("@/components/SankeyChart"), {
-        ssr: false,
-        loading: () => (
-          <div className="text-xs text-gray-500">Loading flow chart…</div>
-        ),
-      }),
-    []
-  );
 
   // Define runAnalysis before effects that reference it to avoid TDZ errors
   const runAnalysis = useCallback(
@@ -627,43 +616,21 @@ export default function AnalysisPage() {
           </Card>
         )}
         {/* Visualization Grid */}
-        <div className="grid xl:grid-cols-3 gap-6 mb-10">
-          <Card className="p-4 flex flex-col gap-3">
-            <h3 className="text-sm font-semibold tracking-wide text-gray-700">
-              Process Flow
-            </h3>
-            <SankeyChart />
-          </Card>
-          <Card className="p-4 flex flex-col gap-4">
+        <div className="grid xl:grid-cols-2 gap-6 mb-10">
+          <Card className="p-6 flex flex-col gap-4 min-h-[320px]">
             <h3 className="text-sm font-semibold tracking-wide text-gray-700">
               Emissions Breakdown
             </h3>
-            {emissionEntries.length ? (
-              <div className="flex items-end gap-2 h-40">
-                {emissionEntries.map((e) => {
-                  const pct = totalEm ? (e.value / totalEm) * 100 : 0;
-                  return (
-                    <div
-                      key={e.key}
-                      className="flex-1 flex flex-col items-center gap-1"
-                    >
-                      <div
-                        className="w-full rounded-t bg-brand-emerald/70 hover:bg-brand-emerald transition"
-                        style={{ height: `${Math.max(4, pct)}%` }}
-                        title={`${e.key}: ${e.value.toFixed(2)} kg CO₂e`}
-                      />
-                      <span className="text-[10px] text-gray-600 text-center leading-tight">
-                        {e.key}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-xs text-gray-500">No breakdown data.</p>
-            )}
+            <div className="flex-1 flex items-center justify-center">
+              <EmissionsSankeyChart 
+                emissionsBreakdown={emissionsBreakdown}
+                width={480}
+                height={260}
+                animated={true}
+              />
+            </div>
           </Card>
-          <Card className="p-4 flex flex-col gap-4 items-center justify-center">
+          <Card className="p-6 flex flex-col gap-4 items-center justify-center min-h-[320px]">
             <h3 className="text-sm font-semibold tracking-wide text-gray-700">
               Circularity
             </h3>
